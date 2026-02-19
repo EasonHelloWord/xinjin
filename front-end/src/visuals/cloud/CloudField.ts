@@ -11,6 +11,13 @@ import { InteractionMode } from "../../state/types";
 import { CloudVisualParams } from "./mapping";
 import { cloudFragmentShader, cloudVertexShader } from "./shaders";
 
+const LEGACY_PARTICLE_COUNT = 2500;
+const LEGACY_SUBDIVISIONS = 6;
+const LEGACY_DEFORM_RADIUS = 1.1;
+const LEGACY_GATE_INNER = 0.15;
+const LEGACY_GATE_PEAK = 0.65;
+const LEGACY_GATE_OUTER = 1.6;
+
 export interface CloudInteractionState {
   mode: InteractionMode;
   maxOffset: number;
@@ -46,8 +53,8 @@ export class CloudField {
   private velocity = new Vector3();
   private interactionMode: InteractionMode = "gravity";
 
-  constructor(_count = APP_CONFIG.cloud.particleCount, radius = APP_CONFIG.cloud.sphereRadius) {
-    this.geometry = new IcosahedronGeometry(radius, APP_CONFIG.cloud.subdivisions);
+  constructor(_count = LEGACY_PARTICLE_COUNT, radius = APP_CONFIG.cloud.sphereRadius) {
+    this.geometry = new IcosahedronGeometry(radius, LEGACY_SUBDIVISIONS);
     this.material = new ShaderMaterial({
       vertexShader: cloudVertexShader,
       fragmentShader: cloudFragmentShader,
@@ -59,11 +66,11 @@ export class CloudField {
         uOffset: { value: new Vector3() },
         uAttractor: { value: new Vector3() },
         uDeformStrength: { value: APP_CONFIG.interaction.deformStrength },
-        uDeformRadius: { value: APP_CONFIG.interaction.deformRadius },
+        uDeformRadius: { value: LEGACY_DEFORM_RADIUS },
         uNoiseAmp: { value: APP_CONFIG.interaction.noiseAmp },
-        uGateInner: { value: APP_CONFIG.interaction.gateInner },
-        uGatePeak: { value: APP_CONFIG.interaction.gatePeak },
-        uGateOuter: { value: APP_CONFIG.interaction.gateOuter },
+        uGateInner: { value: LEGACY_GATE_INNER },
+        uGatePeak: { value: LEGACY_GATE_PEAK },
+        uGateOuter: { value: LEGACY_GATE_OUTER },
         uBreathHz: { value: 0.14 },
         uBreathJitter: { value: 0.01 },
         uColorA: { value: new Color("#77aaff") },

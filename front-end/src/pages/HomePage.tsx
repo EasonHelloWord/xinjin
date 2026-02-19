@@ -18,8 +18,23 @@ const stateKeys: Array<keyof StateVisualInput> = [
   "intensity"
 ];
 
+const stateLabels: Record<keyof StateVisualInput, string> = {
+  arousal: "唤醒度",
+  valence: "愉悦度",
+  stability: "稳定度",
+  load: "负载",
+  socialDrain: "社交消耗",
+  intensity: "强度"
+};
+
 const presetByNum: PresetName[] = ["neutral", "happy", "sad", "angry", "anxious", "overloaded"];
 const modeOrder: InteractionMode[] = ["gravity", "off"];
+const modeLabels: Record<InteractionMode, string> = {
+  gravity: "跟随",
+  off: "关闭",
+  repel: "排斥",
+  vortex: "旋涡"
+};
 
 export function HomePage(): JSX.Element {
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -140,7 +155,7 @@ export function HomePage(): JSX.Element {
           </div>
           {message && <div className="message-box">{message}</div>}
 
-          <label>Preset</label>
+          <label>预设</label>
           <select
             value={preset}
             onChange={(e) => {
@@ -158,7 +173,7 @@ export function HomePage(): JSX.Element {
 
           {stateKeys.map((key) => (
             <label key={key}>
-              {key}: {currentState[key].toFixed(2)}
+              {stateLabels[key]}: {currentState[key].toFixed(2)}
               <input
                 type="range"
                 min={0}
@@ -170,60 +185,95 @@ export function HomePage(): JSX.Element {
             </label>
           ))}
 
-          <label>maxOffset
-            <input type="range" min={0.1} max={1.5} step={0.01}
+          <label>最大跟随位移
+            <input
+              type="range"
+              min={0.1}
+              max={1.5}
+              step={0.01}
               value={snapshot?.maxOffset ?? APP_CONFIG.interaction.maxOffset}
-              onChange={(e) => controller.applyConfig("interaction.maxOffset", Number(e.target.value))}/>
+              onChange={(e) => controller.applyConfig("interaction.maxOffset", Number(e.target.value))}
+            />
           </label>
-          <label>springK
-            <input type="range" min={1} max={80} step={0.1}
+          <label>跟随速度
+            <input
+              type="range"
+              min={1}
+              max={80}
+              step={0.1}
               value={snapshot?.springK ?? APP_CONFIG.interaction.springK}
-              onChange={(e) => controller.applyConfig("interaction.springK", Number(e.target.value))}/>
+              onChange={(e) => controller.applyConfig("interaction.springK", Number(e.target.value))}
+            />
           </label>
-          <label>springC
-            <input type="range" min={0.1} max={30} step={0.1}
+          <label>回弹阻尼
+            <input
+              type="range"
+              min={0.1}
+              max={30}
+              step={0.1}
               value={snapshot?.springC ?? APP_CONFIG.interaction.springC}
-              onChange={(e) => controller.applyConfig("interaction.springC", Number(e.target.value))}/>
+              onChange={(e) => controller.applyConfig("interaction.springC", Number(e.target.value))}
+            />
           </label>
-          <label>deformStrength
-            <input type="range" min={0} max={1} step={0.01}
+          <label>形变强度
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
               value={snapshot?.deformStrength ?? APP_CONFIG.interaction.deformStrength}
-              onChange={(e) => controller.applyConfig("interaction.deformStrength", Number(e.target.value))}/>
+              onChange={(e) => controller.applyConfig("interaction.deformStrength", Number(e.target.value))}
+            />
           </label>
-          <label>deformRadius
-            <input type="range" min={0.2} max={3} step={0.01}
-              value={snapshot?.deformRadius ?? APP_CONFIG.interaction.deformRadius}
-              onChange={(e) => controller.applyConfig("interaction.deformRadius", Number(e.target.value))}/>
-          </label>
-          <label>noiseAmp
-            <input type="range" min={0} max={0.6} step={0.01}
+          <label>边缘细节
+            <input
+              type="range"
+              min={0}
+              max={0.6}
+              step={0.01}
               value={snapshot?.noiseAmp ?? APP_CONFIG.interaction.noiseAmp}
-              onChange={(e) => controller.applyConfig("interaction.noiseAmp", Number(e.target.value))}/>
+              onChange={(e) => controller.applyConfig("interaction.noiseAmp", Number(e.target.value))}
+            />
           </label>
-          <label>tauPointer
-            <input type="range" min={0.01} max={0.3} step={0.01}
+          <label>跟随平滑
+            <input
+              type="range"
+              min={0.01}
+              max={0.3}
+              step={0.01}
               value={snapshot?.tauPointer ?? APP_CONFIG.interaction.tauPointer}
-              onChange={(e) => controller.applyConfig("interaction.tauPointer", Number(e.target.value))}/>
+              onChange={(e) => controller.applyConfig("interaction.tauPointer", Number(e.target.value))}
+            />
           </label>
-          <label>hoverBoost
-            <input type="range" min={1} max={3} step={0.01}
-              value={snapshot?.hoverBoost ?? APP_CONFIG.interaction.hoverBoost}
-              onChange={(e) => controller.applyConfig("interaction.hoverBoost", Number(e.target.value))}/>
+          <label>中心死区
+            <input
+              type="range"
+              min={0}
+              max={0.6}
+              step={0.01}
+              value={snapshot?.deadZoneRatio ?? APP_CONFIG.interaction.deadZoneRatio}
+              onChange={(e) => controller.applyConfig("interaction.deadZoneRatio", Number(e.target.value))}
+            />
           </label>
-          <label>gateInner
-            <input type="range" min={0} max={1} step={0.01}
-              value={snapshot?.gateInner ?? APP_CONFIG.interaction.gateInner}
-              onChange={(e) => controller.applyConfig("interaction.gateInner", Number(e.target.value))}/>
+          <label>响应半径
+            <input
+              type="range"
+              min={0.1}
+              max={1.2}
+              step={0.01}
+              value={snapshot?.responseZoneRatio ?? APP_CONFIG.interaction.responseZoneRatio}
+              onChange={(e) => controller.applyConfig("interaction.responseZoneRatio", Number(e.target.value))}
+            />
           </label>
-          <label>gatePeak
-            <input type="range" min={0.1} max={2} step={0.01}
-              value={snapshot?.gatePeak ?? APP_CONFIG.interaction.gatePeak}
-              onChange={(e) => controller.applyConfig("interaction.gatePeak", Number(e.target.value))}/>
-          </label>
-          <label>gateOuter
-            <input type="range" min={0.2} max={3} step={0.01}
-              value={snapshot?.gateOuter ?? APP_CONFIG.interaction.gateOuter}
-              onChange={(e) => controller.applyConfig("interaction.gateOuter", Number(e.target.value))}/>
+          <label>按下形变增益
+            <input
+              type="range"
+              min={1}
+              max={2.5}
+              step={0.01}
+              value={snapshot?.pointerDownBoost ?? APP_CONFIG.interaction.pointerDownBoost}
+              onChange={(e) => controller.applyConfig("interaction.pointerDownBoost", Number(e.target.value))}
+            />
           </label>
 
           <div className="btn-row">
@@ -233,13 +283,13 @@ export function HomePage(): JSX.Element {
                 className={snapshot?.interactionMode === mode ? "active" : ""}
                 onClick={() => controller.setInteractionMode(mode)}
               >
-                {mode}
+                {modeLabels[mode]}
               </button>
             ))}
           </div>
           <div className="btn-row">
             <button onClick={() => controller.toggleBloom()}>
-              Bloom: {snapshot?.bloomEnabled ? "On" : "Off"}
+              辉光: {snapshot?.bloomEnabled ? "开" : "关"}
             </button>
             <button onClick={() => controller.togglePause()}>{snapshot?.paused ? "继续" : "暂停"}</button>
           </div>
@@ -251,4 +301,3 @@ export function HomePage(): JSX.Element {
     </div>
   );
 }
-

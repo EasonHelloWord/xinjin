@@ -24,15 +24,16 @@ export interface ControllerSnapshot {
   springK: number;
   springC: number;
   deformStrength: number;
-  deformRadius: number;
   noiseAmp: number;
   tauPointer: number;
-  hoverBoost: number;
-  gateInner: number;
-  gatePeak: number;
-  gateOuter: number;
+  deadZoneRatio: number;
+  responseZoneRatio: number;
+  offsetCapRatio: number;
+  radiusBaseRatio: number;
+  radiusDensityRatio: number;
+  breathAmplitude: number;
+  pointerDownBoost: number;
   sphereRadius: number;
-  subdivisions: number;
   paused: boolean;
   bloomEnabled: boolean;
 }
@@ -49,16 +50,16 @@ export class CloudController {
   private springK = APP_CONFIG.interaction.springK;
   private springC = APP_CONFIG.interaction.springC;
   private deformStrength = APP_CONFIG.interaction.deformStrength;
-  private deformRadius = APP_CONFIG.interaction.deformRadius;
   private noiseAmp = APP_CONFIG.interaction.noiseAmp;
   private tauPointer = APP_CONFIG.interaction.tauPointer;
-  private hoverBoost = APP_CONFIG.interaction.hoverBoost;
-  private gateInner = APP_CONFIG.interaction.gateInner;
-  private gatePeak = APP_CONFIG.interaction.gatePeak;
-  private gateOuter = APP_CONFIG.interaction.gateOuter;
+  private deadZoneRatio = APP_CONFIG.interaction.deadZoneRatio;
+  private responseZoneRatio = APP_CONFIG.interaction.responseZoneRatio;
+  private offsetCapRatio = APP_CONFIG.interaction.offsetCapRatio;
+  private radiusBaseRatio = APP_CONFIG.interaction.radiusBaseRatio;
+  private radiusDensityRatio = APP_CONFIG.interaction.radiusDensityRatio;
+  private breathAmplitude = APP_CONFIG.interaction.breathAmplitude;
+  private pointerDownBoost = APP_CONFIG.interaction.pointerDownBoost;
   private sphereRadius = APP_CONFIG.cloud.sphereRadius;
-  private subdivisions = APP_CONFIG.cloud.subdivisions;
-  private pointSizeOverride: number | null = null;
   private listeners = new Set<Listener>();
 
   setState(partial: Partial<StateVisualInput>, transitionMs = 500): void {
@@ -150,11 +151,6 @@ export class CloudController {
       this.notify();
       return true;
     }
-    if (key === "interaction.deformRadius" && typeof value === "number") {
-      this.deformRadius = Math.max(0.1, Math.min(5, value));
-      this.notify();
-      return true;
-    }
     if (key === "interaction.noiseAmp" && typeof value === "number") {
       this.noiseAmp = Math.max(0, Math.min(1, value));
       this.notify();
@@ -165,23 +161,38 @@ export class CloudController {
       this.notify();
       return true;
     }
-    if (key === "interaction.hoverBoost" && typeof value === "number") {
-      this.hoverBoost = Math.max(1, Math.min(4, value));
+    if (key === "interaction.deadZoneRatio" && typeof value === "number") {
+      this.deadZoneRatio = Math.max(0, Math.min(0.9, value));
       this.notify();
       return true;
     }
-    if (key === "interaction.gateInner" && typeof value === "number") {
-      this.gateInner = Math.max(0, Math.min(2, value));
+    if (key === "interaction.responseZoneRatio" && typeof value === "number") {
+      this.responseZoneRatio = Math.max(0.01, Math.min(1.5, value));
       this.notify();
       return true;
     }
-    if (key === "interaction.gatePeak" && typeof value === "number") {
-      this.gatePeak = Math.max(0.01, Math.min(3, value));
+    if (key === "interaction.offsetCapRatio" && typeof value === "number") {
+      this.offsetCapRatio = Math.max(0.1, Math.min(1.5, value));
       this.notify();
       return true;
     }
-    if (key === "interaction.gateOuter" && typeof value === "number") {
-      this.gateOuter = Math.max(0.02, Math.min(6, value));
+    if (key === "interaction.radiusBaseRatio" && typeof value === "number") {
+      this.radiusBaseRatio = Math.max(0.05, Math.min(0.6, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.radiusDensityRatio" && typeof value === "number") {
+      this.radiusDensityRatio = Math.max(0, Math.min(0.3, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.breathAmplitude" && typeof value === "number") {
+      this.breathAmplitude = Math.max(0, Math.min(0.15, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.pointerDownBoost" && typeof value === "number") {
+      this.pointerDownBoost = Math.max(1, Math.min(3, value));
       this.notify();
       return true;
     }
@@ -190,18 +201,8 @@ export class CloudController {
       this.notify();
       return true;
     }
-    if (key === "cloud.subdivisions" && typeof value === "number") {
-      this.subdivisions = Math.max(2, Math.min(8, Math.round(value)));
-      this.notify();
-      return true;
-    }
     if (key === "cloud.enableBloomByDefault" && typeof value === "boolean") {
       this.bloomEnabled = value;
-      this.notify();
-      return true;
-    }
-    if (key === "cloud.pointSize" && typeof value === "number") {
-      this.pointSizeOverride = Math.max(0.8, Math.min(6, value));
       this.notify();
       return true;
     }
@@ -224,25 +225,24 @@ export class CloudController {
   }
 
   private snapshot(): ControllerSnapshot {
-    const visual = mapStateToVisual(this.state);
-    if (this.pointSizeOverride !== null) visual.pointSize = this.pointSizeOverride;
     return {
       state: { ...this.state },
-      visual,
+      visual: mapStateToVisual(this.state),
       interactionMode: this.interactionMode,
       maxOffset: this.maxOffset,
       springK: this.springK,
       springC: this.springC,
       deformStrength: this.deformStrength,
-      deformRadius: this.deformRadius,
       noiseAmp: this.noiseAmp,
       tauPointer: this.tauPointer,
-      hoverBoost: this.hoverBoost,
-      gateInner: this.gateInner,
-      gatePeak: this.gatePeak,
-      gateOuter: this.gateOuter,
+      deadZoneRatio: this.deadZoneRatio,
+      responseZoneRatio: this.responseZoneRatio,
+      offsetCapRatio: this.offsetCapRatio,
+      radiusBaseRatio: this.radiusBaseRatio,
+      radiusDensityRatio: this.radiusDensityRatio,
+      breathAmplitude: this.breathAmplitude,
+      pointerDownBoost: this.pointerDownBoost,
       sphereRadius: this.sphereRadius,
-      subdivisions: this.subdivisions,
       paused: this.paused,
       bloomEnabled: this.bloomEnabled
     };
@@ -253,4 +253,3 @@ export class CloudController {
     this.listeners.forEach((cb) => cb(snap));
   }
 }
-
