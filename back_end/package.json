@@ -1,0 +1,27 @@
+{
+  "name": "xinjin-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal websocket backend for xinjin front-end",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@fastify/websocket": "^11.2.0",
+    "fastify": "^5.3.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.8",
+    "@types/ws": "^8.5.14",
+    "pino-pretty": "^13.0.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.8.2"
+  }
+}

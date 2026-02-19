@@ -34,6 +34,7 @@ export interface ControllerSnapshot {
   breathAmplitude: number;
   pointerDownBoost: number;
   sphereRadius: number;
+  stageCenterYOffset: number;
   paused: boolean;
   bloomEnabled: boolean;
 }
@@ -60,6 +61,7 @@ export class CloudController {
   private breathAmplitude = APP_CONFIG.interaction.breathAmplitude;
   private pointerDownBoost = APP_CONFIG.interaction.pointerDownBoost;
   private sphereRadius = APP_CONFIG.cloud.sphereRadius;
+  private stageCenterYOffset = 0;
   private listeners = new Set<Listener>();
 
   setState(partial: Partial<StateVisualInput>, transitionMs = 500): void {
@@ -102,6 +104,11 @@ export class CloudController {
 
   getInteractionMode(): InteractionMode {
     return this.interactionMode;
+  }
+
+  setStageCenterYOffset(value: number): void {
+    this.stageCenterYOffset = Math.max(-0.4, Math.min(0.4, value));
+    this.notify();
   }
 
   onSnapshot(cb: Listener): () => void {
@@ -243,6 +250,7 @@ export class CloudController {
       breathAmplitude: this.breathAmplitude,
       pointerDownBoost: this.pointerDownBoost,
       sphereRadius: this.sphereRadius,
+      stageCenterYOffset: this.stageCenterYOffset,
       paused: this.paused,
       bloomEnabled: this.bloomEnabled
     };

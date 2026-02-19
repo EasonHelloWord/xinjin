@@ -226,7 +226,7 @@ export class CloudEngine {
       this.pointerSmoothed = null;
     }
 
-    const center = this.getCenter();
+    const center = this.getCenter(snapshot);
     let tx = 0;
     let ty = 0;
 
@@ -269,7 +269,7 @@ export class CloudEngine {
     ctx.fillStyle = APP_CONFIG.cloud.background;
     ctx.fillRect(0, 0, this.width, this.height);
 
-    const center = this.getCenter();
+    const center = this.getCenter(snapshot);
     const cx = center.x + this.offset.x;
     const cy = center.y + this.offset.y;
     // Keep breathing phase continuous so changing arousal (frequency) does not cause size jumps.
@@ -327,8 +327,8 @@ export class CloudEngine {
     }
   }
 
-  private getCenter(): Vec2 {
-    return { x: this.width * 0.5, y: this.height * 0.52 };
+  private getCenter(snapshot: ReturnType<CloudController["update"]>): Vec2 {
+    return { x: this.width * 0.5, y: this.height * (0.5 + snapshot.stageCenterYOffset) };
   }
 
   private getBaseRadius(snapshot: ReturnType<CloudController["update"]>): number {

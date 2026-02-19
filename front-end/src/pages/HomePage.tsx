@@ -7,7 +7,6 @@ import { WsClient, WsConnectionState } from "../net/wsClient";
 import { PRESETS } from "../state/presets";
 import { InteractionMode, PresetName, StateVisualInput, defaultState } from "../state/types";
 import { ChatDock } from "../chat/ChatDock";
-import { VideoPanel } from "../media/VideoPanel";
 
 const stateKeys: Array<keyof StateVisualInput> = [
   "arousal",
@@ -44,8 +43,8 @@ export function HomePage(): JSX.Element {
   const [fps, setFps] = useState(0);
   const [wsStatus, setWsStatus] = useState<WsConnectionState>("closed");
   const [message, setMessage] = useState<string>("");
-  const [showVideoPanel, setShowVideoPanel] = useState(false);
   const [showDebug, setShowDebug] = useState(true);
+  const [chatCollapsed, setChatCollapsed] = useState(false);
 
   useEffect(() => {
     const off = controller.onSnapshot((snap) => setSnapshot(snap));
@@ -106,12 +105,8 @@ export function HomePage(): JSX.Element {
         controller.setPreset(payload.suggestedPreset, undefined, 850);
       }
     });
-    const offVideo = inputBus.on("video_state_hint", (payload) => {
-      controller.setState(payload.partialState, 700);
-    });
     return () => {
       offSystem();
-      offVideo();
     };
   }, [controller]);
 
@@ -136,6 +131,10 @@ export function HomePage(): JSX.Element {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [controller]);
+
+  useEffect(() => {
+    controller.setStageCenterYOffset(chatCollapsed ? 0 : -0.08);
+  }, [chatCollapsed, controller]);
 
   const currentState = snapshot?.state ?? defaultState;
 
@@ -296,8 +295,7 @@ export function HomePage(): JSX.Element {
           <pre>{JSON.stringify(currentState, null, 2)}</pre>
         </aside>
       )}
-      <ChatDock onOpenVideoPanel={() => setShowVideoPanel(true)} />
-      <VideoPanel open={showVideoPanel} onClose={() => setShowVideoPanel(false)} />
+      <ChatDock onCollapsedChange={setChatCollapsed} />
     </div>
   );
 }
