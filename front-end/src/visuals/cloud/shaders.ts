@@ -1,4 +1,3 @@
-// 顶点着色器：负责粒子形变、呼吸、噪声、鼠标交互等位移计算。
 export const cloudVertexShader = `
 attribute vec3 aRandom;
 uniform float uTime;
@@ -10,9 +9,11 @@ uniform float uBreathHz;
 uniform float uBreathJitter;
 uniform float uSocialSink;
 uniform float uDensity;
-uniform vec3 uMouse;
-uniform float uInteractionStrength;
-uniform float uInteractionRadius;
+uniform vec3 uPointer;
+uniform vec3 uOffset;
+uniform vec3 uDir;
+uniform float uStretch;
+uniform float uDetailAmount;
 uniform int uInteractionMode;
 uniform float uClickBoost;
 varying float vMix;
@@ -46,8 +47,10 @@ float noise3(vec3 p) {
 }
 
 void main() {
-  vec3 p = position;
+  vec3 p0 = position;
+  vec3 p = p0;
   float timeScale = uTime * 6.2831853;
+
   float breath = sin(timeScale * uBreathHz + aRandom.x * 9.0) * (0.03 + uDensity * 0.08);
   breath += sin(timeScale * (uBreathHz + uBreathJitter) + aRandom.y * 4.0) * 0.02;
 
@@ -55,21 +58,28 @@ void main() {
   p *= (1.0 + breath + (n - 0.5) * uNoiseAmp);
   p += (aRandom - 0.5) * uJitter * (0.4 + sin(uTime * 1.5 + aRandom.z * 20.0) * 0.6);
 
+  // Layer B: anisotropic stretch around center (volume-like pull).
+  vec3 d = normalize(uDir + vec3(1e-5));
+  float axial = dot(p0, d);
+  vec3 axialV = d * axial;
+  vec3 radialV = p0 - axialV;
+  float stretch = uStretch;
+  p += axialV * stretch - radialV * (stretch * 0.5);
+
+  // Layer A: center-of-mass global offset.
+  p += uOffset;
+
+  // Layer C: small local disturbance near pointer (<= 20% subjective weight).
+  if (uInteractionMode != 0) {
+    vec3 toPointer = uPointer - p;
+    float dist = length(toPointer);
+    float local = smoothstep(1.6, 0.0, dist) * uDetailAmount;
+    vec3 t = normalize(vec3(-toPointer.y, toPointer.x, 0.0) + vec3(1e-5));
+    p += t * sin(uTime * 9.0 + aRandom.z * 14.0) * local * (0.06 * uClickBoost);
+  }
+
   float edge = smoothstep(0.4, 1.8, length(p));
   p.y -= uSocialSink * edge;
-
-  vec3 toMouse = uMouse - p;
-  float d = length(toMouse);
-  float influence = smoothstep(uInteractionRadius, 0.0, d);
-  float strength = uInteractionStrength * uClickBoost * influence;
-  if (uInteractionMode == 1) {
-    p += normalize(toMouse + vec3(1e-5)) * strength;
-  } else if (uInteractionMode == 2) {
-    p -= normalize(toMouse + vec3(1e-5)) * strength;
-  } else if (uInteractionMode == 3) {
-    vec3 tangent = normalize(vec3(-toMouse.y, toMouse.x, 0.0) + vec3(1e-5));
-    p += tangent * strength * 1.2;
-  }
 
   vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mvPosition;
@@ -81,7 +91,6 @@ void main() {
 }
 `;
 
-// 片元着色器：负责粒子圆点软边与颜色混合。
 export const cloudFragmentShader = `
 uniform vec3 uColorA;
 uniform vec3 uColorB;
@@ -98,3 +107,4 @@ void main() {
   gl_FragColor = vec4(color, alpha);
 }
 `;
+

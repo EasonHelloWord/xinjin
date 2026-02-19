@@ -88,7 +88,7 @@ src/
 
 - `setState(partial, transitionMs?)`
 - `setPreset(name, intensity?, transitionMs?)`
-- `setInteractionMode("attract"|"repel"|"vortex"|"off")`
+- `setInteractionMode("gravity"|"off"|"repel"|"vortex")`
 - `pause(bool)`
 - 额外：`toggleBloom()`、`togglePause()`、`applyConfig(...)`
 
@@ -102,7 +102,7 @@ src/
 {"type":"setState","state":{"arousal":0.8,"valence":0.3},"transitionMs":700}
 {"type":"setPreset","name":"happy","intensity":0.9,"transitionMs":600}
 {"type":"setInteractionMode","mode":"vortex"}
-{"type":"setConfig","key":"interaction.interactionStrength","value":0.9}
+{"type":"setConfig","key":"interaction.attractStrength","value":1.1}
 ```
 
 `setConfig` 白名单在 `src/config.ts` 的 `setConfigWhitelist`。
@@ -174,5 +174,36 @@ src/
 
 ## 后续接入 Dashboard/Login
 
-路由骨架已保留在 `src/App.tsx`。  
+路由骨架已保留在 `src/App.tsx`。 
 后续只需替换 `src/pages/PlaceholderPage.tsx` 对应路由元素为真实页面组件，并复用当前 `InputBus + CloudController + wsClient` 基础设施。
+
+## 鼠标交互模型（Gravity Soft Body）
+
+当前交互模型为 `spring-damper + anisotropic stretch`：
+
+- Layer A（全局位移）：
+  - 使用高斯吸引目标位移 `offsetTarget`
+  - 通过二阶弹簧阻尼系统追踪 `offsetTarget`，实现平滑跟随与回弹
+- Layer B（沿指向拉伸）：
+  - 沿鼠标方向拉长，垂直方向轻微收缩，表现“果冻被吸住”
+- Layer C（局部细节）：
+  - 仅做轻微扰动，幅度控制在整体形变感受的 20% 以内
+
+默认建议参数（见 `src/config.ts`）：
+
+- `attractStrength`: `0.9`
+- `attractRadius`: `1.25`
+- `stiffness`: `18`
+- `damping`: `8.5`
+- `maxOffset`: `0.6`
+- `stretchStrength`: `0.95`
+- `stretchMax`: `0.52`
+- `relaxSpeed`: `10`
+- `hoverBoost`: `1.7`
+
+调参建议：
+
+- 跟随太弱：增大 `attractStrength` 或 `attractRadius`
+- 回弹太慢：增大 `stiffness` 或 `relaxSpeed`
+- 抖动/过冲：增大 `damping` 或减小 `stiffness`
+- 拉伸太夸张：减小 `stretchStrength` 或 `stretchMax`

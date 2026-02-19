@@ -74,7 +74,7 @@
 字段说明：
 
 - `type`: 固定为 `setInteractionMode`
-- `mode`: `attract | repel | vortex | off`
+- `mode`: `gravity | off | repel | vortex`
 
 #### `setConfig`
 
@@ -83,7 +83,7 @@
 ```json
 {
   "type": "setConfig",
-  "key": "interaction.interactionStrength",
+  "key": "interaction.attractStrength",
   "value": 0.9
 }
 ```
@@ -97,9 +97,15 @@
 允许的 `key` 白名单（`src/config.ts`）：
 
 - `cloud.pointSize`
-- `interaction.interactionStrength`
-- `interaction.interactionRadius`
+- `interaction.attractStrength`
+- `interaction.attractRadius`
+- `interaction.stiffness`
 - `interaction.damping`
+- `interaction.maxOffset`
+- `interaction.stretchStrength`
+- `interaction.stretchMax`
+- `interaction.relaxSpeed`
+- `interaction.hoverBoost`
 - `cloud.enableBloomByDefault`
 
 ### 2.3 连接状态与错误
@@ -179,7 +185,7 @@ type PresetName =
 ### 4.3 `InteractionMode`
 
 ```ts
-type InteractionMode = "attract" | "repel" | "vortex" | "off";
+type InteractionMode = "gravity" | "off" | "repel" | "vortex";
 ```
 
 ## 5. 前端服务接口（供二次开发）

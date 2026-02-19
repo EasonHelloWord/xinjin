@@ -1,5 +1,5 @@
-// 粒子与鼠标的交互模式。
-export type InteractionMode = "attract" | "repel" | "vortex" | "off";
+// 粒子与鼠标的交互模式（当前主用 gravity/off，预留 repel/vortex 扩展）。
+export type InteractionMode = "gravity" | "off" | "repel" | "vortex";
 
 // 可视化状态输入（建议都保持在 0..1 区间）。
 export interface StateVisualInput {

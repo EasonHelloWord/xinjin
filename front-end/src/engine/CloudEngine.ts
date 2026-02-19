@@ -16,17 +16,14 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { APP_CONFIG } from "../config";
 import { CloudController } from "./CloudController";
 import { CloudField } from "../visuals/cloud/CloudField";
+import { pointerEventToNdc, projectPointerToPlane } from "../visuals/cloud/interaction/pointer";
 
 interface EngineCallbacks {
-  // 实时 FPS 回调（用于 UI 显示）
   onFps?: (fps: number) => void;
-  // 错误提示回调（用于页面消息框）
   onError?: (message: string) => void;
-  // 自动降级提示回调
   onDegrade?: (message: string) => void;
 }
 
-// Three.js 引擎：负责场景初始化、逐帧更新、交互和性能降级。
 export class CloudEngine {
   private container: HTMLElement;
   private controller: CloudController;
@@ -41,8 +38,10 @@ export class CloudEngine {
   private raycaster = new Raycaster();
   private plane = new Plane(new Vector3(0, 0, 1), 0);
   private ndc = new Vector2();
-  private targetMouse = new Vector3();
-  private smoothMouse = new Vector3();
+  private targetPointer = new Vector3();
+  private smoothPointer = new Vector3();
+  private restPointer = new Vector3(0, 0, 0);
+  private pointerWorld: Vector3 | null = null;
   private pointerDown = false;
   private fpsWindow: number[] = [];
   private degradeLevel = 0;
@@ -54,7 +53,6 @@ export class CloudEngine {
     this.callbacks = callbacks;
   }
 
-  // 初始化渲染资源并启动动画循环。
   init(): void {
     if (!this.supportWebGL()) {
       this.callbacks.onError?.("当前环境不支持 WebGL，无法初始化云团渲染。");
@@ -81,7 +79,6 @@ export class CloudEngine {
     this.loop();
   }
 
-  // 创建后处理管线（RenderPass + Bloom）。
   private createComposer(width: number, height: number): void {
     if (!this.renderer || !this.scene || !this.camera) return;
     this.composer = new EffectComposer(this.renderer);
@@ -95,13 +92,11 @@ export class CloudEngine {
     this.composer.addPass(bloomPass);
   }
 
-  // 外部手动设置 Bloom（实际转发给 controller 保持状态源一致）。
   setBloomEnabled(enabled: boolean): void {
     const snap = this.controller.getBloomEnabled();
     if (snap !== enabled) this.controller.setBloomEnabled(enabled);
   }
 
-  // 主循环：更新控制器、更新粒子、渲染画面。
   private loop = (): void => {
     this.frameId = requestAnimationFrame(this.loop);
     const delta = Math.min(0.05, this.clock.getDelta());
@@ -113,23 +108,32 @@ export class CloudEngine {
       return;
     }
 
-    // 根据阻尼换算鼠标平滑速度，避免移动过于突兀。
-    const smooth = Math.max(0.02, Math.min(0.4, (1 - snapshot.damping) * 0.45 + APP_CONFIG.interaction.mouseSmooth * 0.2));
-    this.smoothMouse.lerp(this.targetMouse, smooth);
+    const smooth = Math.max(0.02, Math.min(0.4, APP_CONFIG.interaction.mouseSmooth));
+    const pointerTarget = this.pointerWorld ? this.targetPointer : this.restPointer;
+    this.smoothPointer.lerp(pointerTarget, smooth);
+
     this.cloud.updateTime(elapsed);
     this.cloud.applyVisual(snapshot.visual);
-    // 根据视觉密度调整实际绘制粒子数，兼顾效果与性能。
     const targetCount = Math.floor(this.particleCount * (0.4 + snapshot.visual.density * 0.6));
     this.cloud.setCount(targetCount);
-    this.cloud.setMouseWorld(this.smoothMouse);
-    this.cloud.setInteraction(
-      snapshot.interactionMode,
-      snapshot.interactionStrength,
-      snapshot.interactionRadius,
-      this.pointerDown ? APP_CONFIG.interaction.clickBoost : 1
-    );
+    this.cloud.updateInteraction(delta, this.pointerWorld ? this.smoothPointer : null, {
+      mode: snapshot.interactionMode,
+      pointerDown: this.pointerDown,
+      attractStrength: snapshot.attractStrength,
+      attractRadius: snapshot.attractRadius,
+      stiffness: snapshot.stiffness,
+      damping: snapshot.damping,
+      maxOffset: snapshot.maxOffset,
+      innerRadius: snapshot.innerRadius,
+      peakRadius: snapshot.peakRadius,
+      outerRadius: snapshot.outerRadius,
+      stretchStrength: snapshot.stretchStrength,
+      stretchMax: snapshot.stretchMax,
+      relaxSpeed: snapshot.relaxSpeed,
+      hoverBoost: snapshot.hoverBoost,
+      clickBoost: this.pointerDown ? APP_CONFIG.interaction.clickBoost : 1
+    });
 
-    // 记录 FPS，并在低帧率时自动降级。
     this.applyFpsMetric(delta);
     this.autoDegrade(snapshot.bloomEnabled);
 
@@ -140,7 +144,6 @@ export class CloudEngine {
     }
   };
 
-  // 维护滑动窗口平均 FPS。
   private applyFpsMetric(delta: number): void {
     const fps = 1 / Math.max(0.0001, delta);
     this.fpsWindow.push(fps);
@@ -151,7 +154,6 @@ export class CloudEngine {
     this.callbacks.onFps?.(avg);
   }
 
-  // 自动降级策略：关 Bloom -> 降到中粒子数 -> 降到保底粒子数。
   private autoDegrade(bloomEnabled: boolean): void {
     if (!this.fpsWindow.length || !this.cloud) return;
     const avg = this.fpsWindow.reduce((sum, v) => sum + v, 0) / this.fpsWindow.length;
@@ -178,7 +180,6 @@ export class CloudEngine {
     }
   }
 
-  // WebGL 能力检测。
   private supportWebGL(): boolean {
     try {
       const canvas = document.createElement("canvas");
@@ -188,7 +189,6 @@ export class CloudEngine {
     }
   }
 
-  // 响应窗口尺寸变化。
   private onResize = (): void => {
     if (!this.renderer || !this.camera || !this.composer) return;
     const width = Math.max(1, this.container.clientWidth);
@@ -199,17 +199,15 @@ export class CloudEngine {
     this.composer.setSize(width, height);
   };
 
-  // 把鼠标屏幕坐标映射到 z=0 平面世界坐标。
   private onPointerMove = (ev: PointerEvent): void => {
     if (!this.camera) return;
-    const rect = this.container.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
-    this.ndc.set(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
-    this.raycaster.setFromCamera(this.ndc, this.camera);
-    this.raycaster.ray.intersectPlane(this.plane, this.targetMouse);
+    pointerEventToNdc(ev, this.container, this.ndc);
+    const hit = projectPointerToPlane(this.ndc, this.camera, this.raycaster, this.plane, this.targetPointer);
+    if (hit) {
+      this.pointerWorld = this.targetPointer;
+    }
   };
 
-  // 鼠标按下会增加交互强度（clickBoost）。
   private onPointerDown = (): void => {
     this.pointerDown = true;
   };
@@ -218,23 +216,27 @@ export class CloudEngine {
     this.pointerDown = false;
   };
 
-  // 绑定所有运行时事件。
+  private onPointerLeave = (): void => {
+    this.pointerWorld = null;
+    this.pointerDown = false;
+  };
+
   private bindEvents(): void {
     window.addEventListener("resize", this.onResize);
     this.container.addEventListener("pointermove", this.onPointerMove);
     this.container.addEventListener("pointerdown", this.onPointerDown);
+    this.container.addEventListener("pointerleave", this.onPointerLeave);
     window.addEventListener("pointerup", this.onPointerUp);
   }
 
-  // 解绑所有运行时事件。
   private unbindEvents(): void {
     window.removeEventListener("resize", this.onResize);
     this.container.removeEventListener("pointermove", this.onPointerMove);
     this.container.removeEventListener("pointerdown", this.onPointerDown);
+    this.container.removeEventListener("pointerleave", this.onPointerLeave);
     window.removeEventListener("pointerup", this.onPointerUp);
   }
 
-  // 释放资源，防止内存泄漏。
   dispose(): void {
     cancelAnimationFrame(this.frameId);
     this.unbindEvents();

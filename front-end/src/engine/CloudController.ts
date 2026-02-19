@@ -23,9 +23,18 @@ export interface ControllerSnapshot {
   // 映射后的可视化参数（直接给渲染层）
   visual: CloudVisualParams;
   interactionMode: InteractionMode;
-  interactionStrength: number;
-  interactionRadius: number;
+  attractStrength: number;
+  attractRadius: number;
+  stiffness: number;
   damping: number;
+  maxOffset: number;
+  innerRadius: number;
+  peakRadius: number;
+  outerRadius: number;
+  stretchStrength: number;
+  stretchMax: number;
+  relaxSpeed: number;
+  hoverBoost: number;
   paused: boolean;
   bloomEnabled: boolean;
 }
@@ -36,12 +45,21 @@ type Listener = (snapshot: ControllerSnapshot) => void;
 export class CloudController {
   private state: StateVisualInput = { ...defaultState };
   private transition: Transition | null = null;
-  private interactionMode: InteractionMode = "attract";
+  private interactionMode: InteractionMode = "gravity";
   private paused = false;
   private bloomEnabled = APP_CONFIG.cloud.enableBloomByDefault;
-  private interactionStrength = APP_CONFIG.interaction.interactionStrength;
-  private interactionRadius = APP_CONFIG.interaction.interactionRadius;
+  private attractStrength = APP_CONFIG.interaction.attractStrength;
+  private attractRadius = APP_CONFIG.interaction.attractRadius;
+  private stiffness = APP_CONFIG.interaction.stiffness;
   private damping = APP_CONFIG.interaction.damping;
+  private maxOffset = APP_CONFIG.interaction.maxOffset;
+  private innerRadius = APP_CONFIG.interaction.innerRadius;
+  private peakRadius = APP_CONFIG.interaction.peakRadius;
+  private outerRadius = APP_CONFIG.interaction.outerRadius;
+  private stretchStrength = APP_CONFIG.interaction.stretchStrength;
+  private stretchMax = APP_CONFIG.interaction.stretchMax;
+  private relaxSpeed = APP_CONFIG.interaction.relaxSpeed;
+  private hoverBoost = APP_CONFIG.interaction.hoverBoost;
   private pointSizeOverride: number | null = null;
   private listeners = new Set<Listener>();
 
@@ -138,18 +156,63 @@ export class CloudController {
 
   // 应用动态配置，返回是否成功（类型和值范围会做保护）。
   applyConfig(key: SetConfigKey, value: unknown): boolean {
-    if (key === "interaction.interactionStrength" && typeof value === "number") {
-      this.interactionStrength = Math.max(0, Math.min(3, value));
+    if (key === "interaction.attractStrength" && typeof value === "number") {
+      this.attractStrength = Math.max(0, Math.min(3, value));
       this.notify();
       return true;
     }
-    if (key === "interaction.interactionRadius" && typeof value === "number") {
-      this.interactionRadius = Math.max(0.05, Math.min(3, value));
+    if (key === "interaction.attractRadius" && typeof value === "number") {
+      this.attractRadius = Math.max(0.05, Math.min(5, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.stiffness" && typeof value === "number") {
+      this.stiffness = Math.max(1, Math.min(80, value));
       this.notify();
       return true;
     }
     if (key === "interaction.damping" && typeof value === "number") {
-      this.damping = Math.max(0.1, Math.min(0.99, value));
+      this.damping = Math.max(0.2, Math.min(40, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.maxOffset" && typeof value === "number") {
+      this.maxOffset = Math.max(0.05, Math.min(2.5, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.innerRadius" && typeof value === "number") {
+      this.innerRadius = Math.max(0.01, Math.min(2, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.peakRadius" && typeof value === "number") {
+      this.peakRadius = Math.max(0.02, Math.min(3, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.outerRadius" && typeof value === "number") {
+      this.outerRadius = Math.max(0.03, Math.min(5, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.stretchStrength" && typeof value === "number") {
+      this.stretchStrength = Math.max(0, Math.min(3, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.stretchMax" && typeof value === "number") {
+      this.stretchMax = Math.max(0, Math.min(2, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.relaxSpeed" && typeof value === "number") {
+      this.relaxSpeed = Math.max(0.5, Math.min(40, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.hoverBoost" && typeof value === "number") {
+      this.hoverBoost = Math.max(1, Math.min(4, value));
       this.notify();
       return true;
     }
@@ -192,9 +255,18 @@ export class CloudController {
       state: { ...this.state },
       visual,
       interactionMode: this.interactionMode,
-      interactionStrength: this.interactionStrength,
-      interactionRadius: this.interactionRadius,
+      attractStrength: this.attractStrength,
+      attractRadius: this.attractRadius,
+      stiffness: this.stiffness,
       damping: this.damping,
+      maxOffset: this.maxOffset,
+      innerRadius: this.innerRadius,
+      peakRadius: this.peakRadius,
+      outerRadius: this.outerRadius,
+      stretchStrength: this.stretchStrength,
+      stretchMax: this.stretchMax,
+      relaxSpeed: this.relaxSpeed,
+      hoverBoost: this.hoverBoost,
       paused: this.paused,
       bloomEnabled: this.bloomEnabled
     };
