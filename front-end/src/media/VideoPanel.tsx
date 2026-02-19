@@ -1,7 +1,9 @@
+// 视频输入面板：展示权限/状态，并提供启动停止按钮。
 import { useEffect, useState } from "react";
 import { videoInput, VideoPermission, VideoStatus } from "./videoInput";
 
 interface VideoPanelProps {
+  // open=false 时组件直接不渲染。
   open: boolean;
   onClose: () => void;
 }
@@ -11,6 +13,7 @@ export function VideoPanel({ open, onClose }: VideoPanelProps): JSX.Element | nu
   const [status, setStatus] = useState<VideoStatus>("stopped");
 
   useEffect(() => {
+    // 订阅 videoInput 状态，保持面板显示同步。
     const off = videoInput.onState((s) => {
       setPermission(s.permission);
       setStatus(s.status);

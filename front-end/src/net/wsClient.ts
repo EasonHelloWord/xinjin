@@ -1,20 +1,26 @@
 import { APP_CONFIG } from "../config";
 import { PresetName, StateVisualInput, InteractionMode } from "../state/types";
 
+// 服务端 -> 前端的 WS 消息协议。
 export type WsIncomingMessage =
   | { type: "setState"; state: Partial<StateVisualInput>; transitionMs?: number }
   | { type: "setPreset"; name: PresetName; intensity?: number; transitionMs?: number }
   | { type: "setInteractionMode"; mode: InteractionMode }
   | { type: "setConfig"; key: string; value: unknown };
 
+// 连接状态（可用于 UI 状态灯）。
 export type WsConnectionState = "connecting" | "open" | "closed" | "error";
 
 export interface WsClientHandlers {
+  // 收到业务消息时触发。
   onMessage: (msg: WsIncomingMessage) => void;
+  // 连接状态变化时触发。
   onStatus?: (status: WsConnectionState) => void;
+  // 错误消息回调。
   onError?: (error: string) => void;
 }
 
+// WebSocket 客户端：含自动重连（指数退避）。
 export class WsClient {
   private url: string;
   private ws: WebSocket | null = null;
@@ -28,6 +34,7 @@ export class WsClient {
     this.handlers = handlers;
   }
 
+  // 建立连接。若失败会进入重连流程。
   connect(): void {
     this.closedManually = false;
     this.handlers.onStatus?.("connecting");
@@ -62,6 +69,7 @@ export class WsClient {
     };
   }
 
+  // 手动关闭：会阻止后续自动重连。
   close(): void {
     this.closedManually = true;
     if (this.retryTimer) {
@@ -72,6 +80,7 @@ export class WsClient {
     this.ws = null;
   }
 
+  // 指数退避重连：500ms, 1000ms, 2000ms ... 最大 10s。
   private scheduleReconnect(): void {
     const timeout = Math.min(10000, 500 * Math.pow(2, this.retry));
     this.retry += 1;

@@ -1,9 +1,11 @@
+// 聊天浮层：支持文本输入、语音占位输入，并展示消息列表。
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ChatMessage, chatService } from "./chatService";
 import { voiceInput, VoiceStatus } from "../input/voiceInput";
 import { inputBus } from "../events/inputBus";
 
 interface ChatDockProps {
+  // 打开视频输入面板（父组件控制）
   onOpenVideoPanel: () => void;
 }
 
@@ -12,6 +14,7 @@ export function ChatDock({ onOpenVideoPanel }: ChatDockProps): JSX.Element {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
+  // 根据录音状态显示不同文案。
   const voiceLabel = useMemo(() => {
     if (voiceStatus === "recording") return "录音中...";
     if (voiceStatus === "disabled") return "语音不可用";
@@ -19,7 +22,9 @@ export function ChatDock({ onOpenVideoPanel }: ChatDockProps): JSX.Element {
   }, [voiceStatus]);
 
   useEffect(() => {
+    // 订阅聊天消息和语音状态，组件卸载时自动取消。
     const offMessage = chatService.onMessage((msg) => {
+      // 只保留最近 20 条，避免无限增长。
       setMessages((prev) => [...prev.slice(-20), msg]);
     });
     const offVoice = voiceInput.onStatus(setVoiceStatus);
@@ -34,6 +39,7 @@ export function ChatDock({ onOpenVideoPanel }: ChatDockProps): JSX.Element {
     const text = input.trim();
     if (!text) return;
     chatService.sendText(text);
+    // 记录用户行为事件，方便后续埋点或日志分析。
     inputBus.emit("user_action", { type: "chat_send" });
     setInput("");
   };

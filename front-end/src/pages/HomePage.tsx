@@ -1,3 +1,4 @@
+// 主页面：整合云团渲染、WebSocket、输入事件与调试面板。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { APP_CONFIG, SetConfigKey } from "../config";
 import { inputBus } from "../events/inputBus";
@@ -9,6 +10,7 @@ import { InteractionMode, PresetName, StateVisualInput, defaultState } from "../
 import { ChatDock } from "../chat/ChatDock";
 import { VideoPanel } from "../media/VideoPanel";
 
+// 调试面板里可手动调节的状态键。
 const stateKeys: Array<keyof StateVisualInput> = [
   "arousal",
   "valence",
@@ -18,12 +20,16 @@ const stateKeys: Array<keyof StateVisualInput> = [
   "intensity"
 ];
 
+// 键盘 1..6 对应的预设顺序。
 const presetByNum: PresetName[] = ["neutral", "happy", "sad", "angry", "anxious", "overloaded"];
 
+// 交互模式按钮顺序。
 const modeOrder: InteractionMode[] = ["attract", "repel", "vortex", "off"];
 
 export function HomePage(): JSX.Element {
+  // Three.js 渲染容器。
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  // 控制器只创建一次，避免重复初始化状态。
   const controller = useMemo(() => new CloudController(), []);
   const [snapshot, setSnapshot] = useState<ControllerSnapshot | null>(null);
   const [preset, setPreset] = useState<PresetName>("neutral");
@@ -33,11 +39,13 @@ export function HomePage(): JSX.Element {
   const [showVideoPanel, setShowVideoPanel] = useState(false);
 
   useEffect(() => {
+    // 监听控制器快照，驱动 React 面板显示。
     const off = controller.onSnapshot((snap) => setSnapshot(snap));
     return off;
   }, [controller]);
 
   useEffect(() => {
+    // 初始化 Three.js 引擎（挂载/卸载生命周期）。
     const el = canvasRef.current;
     if (!el) return;
     const engine = new CloudEngine(el, controller, {
@@ -54,6 +62,7 @@ export function HomePage(): JSX.Element {
   }, [controller]);
 
   useEffect(() => {
+    // 建立 WS 连接，接收服务端指令并驱动控制器。
     const ws = new WsClient({
       onStatus: setWsStatus,
       onError: setMessage,
@@ -72,6 +81,7 @@ export function HomePage(): JSX.Element {
           return;
         }
         if (msg.type === "setConfig") {
+          // 配置修改必须在白名单内，避免随意注入。
           if (!APP_CONFIG.setConfigWhitelist.includes(msg.key as SetConfigKey)) {
             setMessage(`拒绝 setConfig: ${msg.key} 不在白名单`);
             return;
@@ -85,6 +95,7 @@ export function HomePage(): JSX.Element {
   }, [controller]);
 
   useEffect(() => {
+    // 订阅系统回复与视频提示，让外部输入可以影响云团状态。
     const offSystem = inputBus.on("system_response", (payload) => {
       if (payload.suggestedPreset) {
         setPreset(payload.suggestedPreset);
@@ -101,6 +112,8 @@ export function HomePage(): JSX.Element {
   }, [controller]);
 
   useEffect(() => {
+    // 键盘快捷键：
+    // 1..6 切预设，Space 切 attract/repel，B 开关 Bloom，P 暂停/继续。
     const onKey = (e: KeyboardEvent): void => {
       if (e.key >= "1" && e.key <= "6") {
         const idx = Number(e.key) - 1;
@@ -128,6 +141,7 @@ export function HomePage(): JSX.Element {
 
   return (
     <div className="home-layout">
+      {/* Three.js 画布挂载点 */}
       <div className="cloud-stage" ref={canvasRef} />
       <aside className="side-panel">
         <h2>状态面板</h2>
@@ -166,6 +180,7 @@ export function HomePage(): JSX.Element {
               max={1}
               step={0.01}
               value={currentState[key]}
+              // 手动拖动单一状态项，便于实时观察效果。
               onChange={(e) => controller.setState({ [key]: Number(e.target.value) }, 240)}
             />
           </label>
@@ -179,6 +194,7 @@ export function HomePage(): JSX.Element {
             max={2}
             step={0.01}
             value={snapshot?.interactionStrength ?? APP_CONFIG.interaction.interactionStrength}
+            // 鼠标影响强度：大了粒子响应更明显。
             onChange={(e) => controller.applyConfig("interaction.interactionStrength", Number(e.target.value))}
           />
         </label>
@@ -190,6 +206,7 @@ export function HomePage(): JSX.Element {
             max={2}
             step={0.01}
             value={snapshot?.interactionRadius ?? APP_CONFIG.interaction.interactionRadius}
+            // 鼠标影响半径：大了影响范围更大。
             onChange={(e) => controller.applyConfig("interaction.interactionRadius", Number(e.target.value))}
           />
         </label>
@@ -201,6 +218,7 @@ export function HomePage(): JSX.Element {
             max={0.99}
             step={0.01}
             value={snapshot?.damping ?? APP_CONFIG.interaction.damping}
+            // 阻尼：越大变化越平滑、越不“抖”。
             onChange={(e) => controller.applyConfig("interaction.damping", Number(e.target.value))}
           />
         </label>

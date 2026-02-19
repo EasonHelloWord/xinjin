@@ -1,3 +1,4 @@
+/* 全局样式与布局定义。你改主题色、面板宽度、按钮风格，主要都在这个文件。 */
 :root {
   font-family: "Noto Sans SC", "Segoe UI", sans-serif;
   color: #dde4f3;
@@ -22,6 +23,7 @@ select {
   font: inherit;
 }
 
+/* 主布局：左侧渲染区 + 右侧控制面板 */
 .home-layout {
   position: relative;
   width: 100%;
@@ -32,12 +34,14 @@ select {
   background: radial-gradient(circle at 20% 20%, #0f1830 0%, #04070d 45%, #03040a 100%);
 }
 
+/* 云团渲染容器（Three.js 画布会挂载到这里） */
 .cloud-stage {
   position: relative;
   width: 100%;
   height: 100%;
 }
 
+/* 右侧调试面板 */
 .side-panel {
   background: rgba(8, 12, 22, 0.88);
   border-left: 1px solid rgba(163, 188, 255, 0.15);
@@ -96,6 +100,7 @@ select {
   color: #f26a79;
 }
 
+/* 通用按钮样式 */
 .btn-row {
   display: flex;
   gap: 8px;
@@ -132,6 +137,7 @@ select {
   font-size: 12px;
 }
 
+/* 聊天浮层 */
 .chat-dock {
   position: absolute;
   left: 16px;
@@ -214,6 +220,7 @@ select {
   color: #a9b8d6;
 }
 
+/* 视频面板 */
 .video-panel {
   position: absolute;
   right: 340px;
@@ -251,6 +258,7 @@ select {
   background: linear-gradient(145deg, #091022, #06070e);
 }
 
+/* 移动端适配 */
 @media (max-width: 980px) {
   .home-layout {
     grid-template-columns: 1fr;

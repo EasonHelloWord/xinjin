@@ -1,5 +1,6 @@
 import { PresetName, StateVisualInput } from "../state/types";
 
+// 事件总线消息定义：统一约束事件名与 payload 结构。
 export type InputBusEventMap = {
   text_input: { text: string };
   voice_input: { text: string };
@@ -10,9 +11,11 @@ export type InputBusEventMap = {
 
 type Handler<T> = (payload: T) => void;
 
+// 轻量发布订阅总线：让输入模块与渲染模块解耦。
 class InputBus {
   private handlers = new Map<keyof InputBusEventMap, Set<(...args: unknown[]) => void>>();
 
+  // 订阅事件，返回取消订阅函数。
   on<K extends keyof InputBusEventMap>(
     event: K,
     handler: Handler<InputBusEventMap[K]>
@@ -24,6 +27,7 @@ class InputBus {
     return () => this.off(event, handler);
   }
 
+  // 取消订阅。
   off<K extends keyof InputBusEventMap>(
     event: K,
     handler: Handler<InputBusEventMap[K]>
@@ -31,9 +35,11 @@ class InputBus {
     this.handlers.get(event)?.delete(handler as (...args: unknown[]) => void);
   }
 
+  // 发布事件。
   emit<K extends keyof InputBusEventMap>(event: K, payload: InputBusEventMap[K]): void {
     this.handlers.get(event)?.forEach((handler) => (handler as Handler<InputBusEventMap[K]>)(payload));
   }
 }
 
+// 全局单例。
 export const inputBus = new InputBus();

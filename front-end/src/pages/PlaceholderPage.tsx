@@ -1,6 +1,8 @@
+// 占位页：用于尚未实现的路由页面。
 import { Link } from "react-router-dom";
 
 interface PlaceholderPageProps {
+  // 页面标题（例如 Dashboard / Kanban / Login）
   title: string;
 }
 

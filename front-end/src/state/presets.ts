@@ -1,5 +1,7 @@
 import { PresetName, StateVisualInput } from "./types";
 
+// 情绪预设：用于 UI 下拉框和快捷键快速切换。
+// 修改这里即可批量调整每种情绪的视觉风格。
 export const PRESETS: Record<PresetName, StateVisualInput> = {
   neutral: {
     arousal: 0.45,

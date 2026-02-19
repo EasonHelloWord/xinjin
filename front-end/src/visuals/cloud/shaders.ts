@@ -1,3 +1,4 @@
+// 顶点着色器：负责粒子形变、呼吸、噪声、鼠标交互等位移计算。
 export const cloudVertexShader = `
 attribute vec3 aRandom;
 uniform float uTime;
@@ -80,6 +81,7 @@ void main() {
 }
 `;
 
+// 片元着色器：负责粒子圆点软边与颜色混合。
 export const cloudFragmentShader = `
 uniform vec3 uColorA;
 uniform vec3 uColorB;
