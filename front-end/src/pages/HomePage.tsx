@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { APP_CONFIG, SetConfigKey } from "../config";
 import { inputBus } from "../events/inputBus";
 import { CloudController, ControllerSnapshot } from "../engine/CloudController";
@@ -18,21 +18,37 @@ const stateKeys: Array<keyof StateVisualInput> = [
 ];
 
 const stateLabels: Record<keyof StateVisualInput, string> = {
-  arousal: "唤醒度",
-  valence: "愉悦度",
-  stability: "稳定度",
-  load: "负载",
-  socialDrain: "社交消耗",
-  intensity: "强度"
+  arousal: "Arousal",
+  valence: "Valence",
+  stability: "Stability",
+  load: "Load",
+  socialDrain: "Social Drain",
+  intensity: "Intensity"
 };
 
 const presetByNum: PresetName[] = ["neutral", "happy", "sad", "angry", "anxious", "overloaded"];
 const modeOrder: InteractionMode[] = ["gravity", "off"];
 const modeLabels: Record<InteractionMode, string> = {
-  gravity: "跟随",
-  off: "关闭",
-  repel: "排斥",
-  vortex: "旋涡"
+  gravity: "Follow",
+  off: "Off",
+  repel: "Repel",
+  vortex: "Vortex"
+};
+
+const normalizePreset = (raw: string): PresetName => {
+  if (raw === "tired") return "overloaded";
+  if (raw === "calm") return "happy";
+  if (
+    raw === "neutral" ||
+    raw === "happy" ||
+    raw === "sad" ||
+    raw === "angry" ||
+    raw === "anxious" ||
+    raw === "overloaded"
+  ) {
+    return raw;
+  }
+  return "neutral";
 };
 
 export function HomePage(): JSX.Element {
@@ -54,16 +70,19 @@ export function HomePage(): JSX.Element {
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
+
     const engine = new CloudEngine(el, controller, {
       onFps: setFps,
       onError: setMessage,
       onDegrade: setMessage
     });
+
     try {
       engine.init();
     } catch (err) {
-      setMessage(`渲染初始化失败: ${(err as Error).message}`);
+      setMessage(`Renderer init failed: ${(err as Error).message}`);
     }
+
     return () => engine.dispose();
   }, [controller]);
 
@@ -72,30 +91,69 @@ export function HomePage(): JSX.Element {
       onStatus: setWsStatus,
       onError: setMessage,
       onMessage: (msg) => {
+        if (msg.type === "system_response") {
+          const suggested = msg.suggestedPreset ? normalizePreset(msg.suggestedPreset) : undefined;
+          inputBus.emit("system_response", { text: msg.text, suggestedPreset: suggested });
+          return;
+        }
+
+        if (msg.type === "set_state") {
+          controller.setState(msg.state, msg.transitionMs ?? 500);
+          return;
+        }
+
+        if (msg.type === "set_preset") {
+          const normalized = normalizePreset(msg.name);
+          setPreset(normalized);
+          controller.setPreset(normalized, msg.intensity, msg.transitionMs ?? 700);
+          return;
+        }
+
+        if (msg.type === "error") {
+          setMessage(`[${msg.code}] ${msg.message}`);
+          return;
+        }
+
+        // Backward-compatible messages
         if (msg.type === "setState") {
           controller.setState(msg.state, msg.transitionMs ?? 500);
           return;
         }
+
         if (msg.type === "setPreset") {
           setPreset(msg.name);
           controller.setPreset(msg.name, msg.intensity, msg.transitionMs ?? 700);
           return;
         }
+
         if (msg.type === "setInteractionMode") {
           controller.setInteractionMode(msg.mode);
           return;
         }
+
         if (msg.type === "setConfig") {
           if (!APP_CONFIG.setConfigWhitelist.includes(msg.key as SetConfigKey)) {
-            setMessage(`拒绝 setConfig: ${msg.key} 不在白名单`);
+            setMessage(`Rejected setConfig: ${msg.key}`);
             return;
           }
           controller.applyConfig(msg.key as SetConfigKey, msg.value);
         }
       }
     });
+
+    const offTextInput = inputBus.on("text_input", ({ text }) => {
+      const ok = ws.sendTextInput(text);
+      if (!ok) {
+        setMessage("WS not ready. Message not sent.");
+      }
+    });
+
     ws.connect();
-    return () => ws.close();
+
+    return () => {
+      offTextInput();
+      ws.close();
+    };
   }, [controller]);
 
   useEffect(() => {
@@ -105,9 +163,7 @@ export function HomePage(): JSX.Element {
         controller.setPreset(payload.suggestedPreset, undefined, 850);
       }
     });
-    return () => {
-      offSystem();
-    };
+    return () => offSystem();
   }, [controller]);
 
   useEffect(() => {
@@ -118,16 +174,19 @@ export function HomePage(): JSX.Element {
         setPreset(name);
         controller.setPreset(name);
       }
+
       if (e.code === "Space") {
         e.preventDefault();
         const mode = controller.getInteractionMode();
         controller.setInteractionMode(mode === "gravity" ? "off" : "gravity");
       }
+
       if (e.key.toLowerCase() === "b") controller.toggleBloom();
       if (e.key.toLowerCase() === "p") controller.togglePause();
       if (e.key === "0") controller.setPreset("neutral", undefined, 300);
       if (e.key.toLowerCase() === "m") setShowDebug((v) => !v);
     };
+
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [controller]);
@@ -143,7 +202,7 @@ export function HomePage(): JSX.Element {
       <div className="cloud-stage" ref={canvasRef} />
       {showDebug && (
         <aside className="side-panel">
-          <h2>状态面板</h2>
+          <h2>Status Panel</h2>
           <div className="status-row">
             <span>WS</span>
             <span className={`status-dot ${wsStatus}`}>{wsStatus}</span>
@@ -154,7 +213,7 @@ export function HomePage(): JSX.Element {
           </div>
           {message && <div className="message-box">{message}</div>}
 
-          <label>预设</label>
+          <label>Preset</label>
           <select
             value={preset}
             onChange={(e) => {
@@ -184,7 +243,8 @@ export function HomePage(): JSX.Element {
             </label>
           ))}
 
-          <label>最大跟随位移
+          <label>
+            Max Offset
             <input
               type="range"
               min={0.1}
@@ -194,7 +254,8 @@ export function HomePage(): JSX.Element {
               onChange={(e) => controller.applyConfig("interaction.maxOffset", Number(e.target.value))}
             />
           </label>
-          <label>跟随速度
+          <label>
+            Follow Speed
             <input
               type="range"
               min={1}
@@ -204,7 +265,8 @@ export function HomePage(): JSX.Element {
               onChange={(e) => controller.applyConfig("interaction.springK", Number(e.target.value))}
             />
           </label>
-          <label>回弹阻尼
+          <label>
+            Damping
             <input
               type="range"
               min={0.1}
@@ -214,7 +276,8 @@ export function HomePage(): JSX.Element {
               onChange={(e) => controller.applyConfig("interaction.springC", Number(e.target.value))}
             />
           </label>
-          <label>形变强度
+          <label>
+            Deform Strength
             <input
               type="range"
               min={0}
@@ -224,7 +287,8 @@ export function HomePage(): JSX.Element {
               onChange={(e) => controller.applyConfig("interaction.deformStrength", Number(e.target.value))}
             />
           </label>
-          <label>边缘细节
+          <label>
+            Noise
             <input
               type="range"
               min={0}
@@ -234,7 +298,8 @@ export function HomePage(): JSX.Element {
               onChange={(e) => controller.applyConfig("interaction.noiseAmp", Number(e.target.value))}
             />
           </label>
-          <label>跟随平滑
+          <label>
+            Pointer Tau
             <input
               type="range"
               min={0.01}
@@ -244,7 +309,8 @@ export function HomePage(): JSX.Element {
               onChange={(e) => controller.applyConfig("interaction.tauPointer", Number(e.target.value))}
             />
           </label>
-          <label>中心死区
+          <label>
+            Dead Zone
             <input
               type="range"
               min={0}
@@ -254,7 +320,8 @@ export function HomePage(): JSX.Element {
               onChange={(e) => controller.applyConfig("interaction.deadZoneRatio", Number(e.target.value))}
             />
           </label>
-          <label>响应半径
+          <label>
+            Response Zone
             <input
               type="range"
               min={0.1}
@@ -264,7 +331,8 @@ export function HomePage(): JSX.Element {
               onChange={(e) => controller.applyConfig("interaction.responseZoneRatio", Number(e.target.value))}
             />
           </label>
-          <label>按下形变增益
+          <label>
+            Pointer Boost
             <input
               type="range"
               min={1}
@@ -288,9 +356,9 @@ export function HomePage(): JSX.Element {
           </div>
           <div className="btn-row">
             <button onClick={() => controller.toggleBloom()}>
-              辉光: {snapshot?.bloomEnabled ? "开" : "关"}
+              Bloom: {snapshot?.bloomEnabled ? "On" : "Off"}
             </button>
-            <button onClick={() => controller.togglePause()}>{snapshot?.paused ? "继续" : "暂停"}</button>
+            <button onClick={() => controller.togglePause()}>{snapshot?.paused ? "Resume" : "Pause"}</button>
           </div>
           <pre>{JSON.stringify(currentState, null, 2)}</pre>
         </aside>
