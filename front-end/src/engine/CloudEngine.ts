@@ -39,8 +39,6 @@ export class CloudEngine {
   private plane = new Plane(new Vector3(0, 0, 1), 0);
   private ndc = new Vector2();
   private targetPointer = new Vector3();
-  private smoothPointer = new Vector3();
-  private restPointer = new Vector3(0, 0, 0);
   private pointerWorld: Vector3 | null = null;
   private pointerDown = false;
   private fpsWindow: number[] = [];
@@ -108,31 +106,25 @@ export class CloudEngine {
       return;
     }
 
-    const smooth = Math.max(0.02, Math.min(0.4, APP_CONFIG.interaction.mouseSmooth));
-    const pointerTarget = this.pointerWorld ? this.targetPointer : this.restPointer;
-    this.smoothPointer.lerp(pointerTarget, smooth);
-
     this.cloud.updateTime(elapsed);
     this.cloud.applyVisual(snapshot.visual);
     const targetCount = Math.floor(this.particleCount * (0.4 + snapshot.visual.density * 0.6));
     this.cloud.setCount(targetCount);
-    this.cloud.updateInteraction(delta, this.pointerWorld ? this.smoothPointer : null, {
+    this.cloud.setInteractionMode(snapshot.interactionMode);
+    this.cloud.updateInteraction(delta, this.pointerWorld, {
       mode: snapshot.interactionMode,
-      pointerDown: this.pointerDown,
-      attractStrength: snapshot.attractStrength,
-      attractRadius: snapshot.attractRadius,
-      stiffness: snapshot.stiffness,
-      damping: snapshot.damping,
       maxOffset: snapshot.maxOffset,
-      innerRadius: snapshot.innerRadius,
-      peakRadius: snapshot.peakRadius,
-      outerRadius: snapshot.outerRadius,
-      stretchStrength: snapshot.stretchStrength,
-      stretchMax: snapshot.stretchMax,
-      relaxSpeed: snapshot.relaxSpeed,
+      springK: snapshot.springK,
+      springC: snapshot.springC,
+      deformStrength: snapshot.deformStrength,
+      deformRadius: snapshot.deformRadius,
+      noiseAmp: snapshot.noiseAmp,
+      tauPointer: snapshot.tauPointer,
       hoverBoost: snapshot.hoverBoost,
-      clickBoost: this.pointerDown ? APP_CONFIG.interaction.clickBoost : 1
-    });
+      gateInner: snapshot.gateInner,
+      gatePeak: snapshot.gatePeak,
+      gateOuter: snapshot.gateOuter
+    }, this.pointerDown);
 
     this.applyFpsMetric(delta);
     this.autoDegrade(snapshot.bloomEnabled);

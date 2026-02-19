@@ -9,7 +9,6 @@ import {
 } from "../state/types";
 import { CloudVisualParams, mapStateToVisual } from "../visuals/cloud/mapping";
 
-// 一次状态过渡的描述（从 start 插值到 end）。
 interface Transition {
   start: StateVisualInput;
   end: StateVisualInput;
@@ -18,58 +17,55 @@ interface Transition {
 }
 
 export interface ControllerSnapshot {
-  // 归一化后的业务状态（0..1）
   state: StateVisualInput;
-  // 映射后的可视化参数（直接给渲染层）
   visual: CloudVisualParams;
   interactionMode: InteractionMode;
-  attractStrength: number;
-  attractRadius: number;
-  stiffness: number;
-  damping: number;
   maxOffset: number;
-  innerRadius: number;
-  peakRadius: number;
-  outerRadius: number;
-  stretchStrength: number;
-  stretchMax: number;
-  relaxSpeed: number;
+  springK: number;
+  springC: number;
+  deformStrength: number;
+  deformRadius: number;
+  noiseAmp: number;
+  tauPointer: number;
   hoverBoost: number;
+  gateInner: number;
+  gatePeak: number;
+  gateOuter: number;
+  sphereRadius: number;
+  subdivisions: number;
   paused: boolean;
   bloomEnabled: boolean;
 }
 
 type Listener = (snapshot: ControllerSnapshot) => void;
 
-// 控制器：负责状态管理、过渡插值、配置更新，并向渲染层提供快照。
 export class CloudController {
   private state: StateVisualInput = { ...defaultState };
   private transition: Transition | null = null;
   private interactionMode: InteractionMode = "gravity";
   private paused = false;
   private bloomEnabled = APP_CONFIG.cloud.enableBloomByDefault;
-  private attractStrength = APP_CONFIG.interaction.attractStrength;
-  private attractRadius = APP_CONFIG.interaction.attractRadius;
-  private stiffness = APP_CONFIG.interaction.stiffness;
-  private damping = APP_CONFIG.interaction.damping;
   private maxOffset = APP_CONFIG.interaction.maxOffset;
-  private innerRadius = APP_CONFIG.interaction.innerRadius;
-  private peakRadius = APP_CONFIG.interaction.peakRadius;
-  private outerRadius = APP_CONFIG.interaction.outerRadius;
-  private stretchStrength = APP_CONFIG.interaction.stretchStrength;
-  private stretchMax = APP_CONFIG.interaction.stretchMax;
-  private relaxSpeed = APP_CONFIG.interaction.relaxSpeed;
+  private springK = APP_CONFIG.interaction.springK;
+  private springC = APP_CONFIG.interaction.springC;
+  private deformStrength = APP_CONFIG.interaction.deformStrength;
+  private deformRadius = APP_CONFIG.interaction.deformRadius;
+  private noiseAmp = APP_CONFIG.interaction.noiseAmp;
+  private tauPointer = APP_CONFIG.interaction.tauPointer;
   private hoverBoost = APP_CONFIG.interaction.hoverBoost;
+  private gateInner = APP_CONFIG.interaction.gateInner;
+  private gatePeak = APP_CONFIG.interaction.gatePeak;
+  private gateOuter = APP_CONFIG.interaction.gateOuter;
+  private sphereRadius = APP_CONFIG.cloud.sphereRadius;
+  private subdivisions = APP_CONFIG.cloud.subdivisions;
   private pointSizeOverride: number | null = null;
   private listeners = new Set<Listener>();
 
-  // 只更新部分状态，默认 500ms 平滑过渡。
   setState(partial: Partial<StateVisualInput>, transitionMs = 500): void {
     const next = normalizeState(partial, this.state);
     this.startTransition(next, transitionMs);
   }
 
-  // 应用预设，可选覆盖 intensity。
   setPreset(name: PresetName, intensity?: number, transitionMs = 700): void {
     const preset = PRESETS[name];
     const merged = {
@@ -79,59 +75,40 @@ export class CloudController {
     this.startTransition(merged, transitionMs);
   }
 
-  // 设置粒子与鼠标的交互模式。
   setInteractionMode(mode: InteractionMode): void {
     this.interactionMode = mode;
     this.notify();
   }
 
-  // 显式设置暂停状态。
-  pause(value: boolean): void {
-    this.paused = value;
-    this.notify();
-  }
-
-  // 切换暂停。
   togglePause(): void {
     this.paused = !this.paused;
     this.notify();
   }
 
-  // 切换 Bloom。
   toggleBloom(): void {
     this.bloomEnabled = !this.bloomEnabled;
     this.notify();
   }
 
-  // 直接设置 Bloom 开关。
   setBloomEnabled(value: boolean): void {
     this.bloomEnabled = value;
     this.notify();
   }
 
-  // 获取当前 Bloom 开关（供引擎降级逻辑使用）。
   getBloomEnabled(): boolean {
     return this.bloomEnabled;
   }
 
-  // 获取当前状态副本（避免外部直接改内部对象）。
-  getState(): StateVisualInput {
-    return { ...this.state };
-  }
-
-  // 获取当前交互模式。
   getInteractionMode(): InteractionMode {
     return this.interactionMode;
   }
 
-  // 订阅快照变化，注册后会立即回调一次当前快照。
   onSnapshot(cb: Listener): () => void {
     this.listeners.add(cb);
     cb(this.snapshot());
     return () => this.listeners.delete(cb);
   }
 
-  // 每帧更新：推进过渡插值并返回最新快照。
   update(deltaSec: number): ControllerSnapshot {
     if (this.transition) {
       this.transition.elapsed += deltaSec * 1000;
@@ -146,73 +123,75 @@ export class CloudController {
         socialDrain: s.socialDrain + (e.socialDrain - s.socialDrain) * t,
         intensity: s.intensity + (e.intensity - s.intensity) * t
       };
-      if (t >= 1) {
-        this.transition = null;
-      }
+      if (t >= 1) this.transition = null;
       this.notify();
     }
     return this.snapshot();
   }
 
-  // 应用动态配置，返回是否成功（类型和值范围会做保护）。
   applyConfig(key: SetConfigKey, value: unknown): boolean {
-    if (key === "interaction.attractStrength" && typeof value === "number") {
-      this.attractStrength = Math.max(0, Math.min(3, value));
-      this.notify();
-      return true;
-    }
-    if (key === "interaction.attractRadius" && typeof value === "number") {
-      this.attractRadius = Math.max(0.05, Math.min(5, value));
-      this.notify();
-      return true;
-    }
-    if (key === "interaction.stiffness" && typeof value === "number") {
-      this.stiffness = Math.max(1, Math.min(80, value));
-      this.notify();
-      return true;
-    }
-    if (key === "interaction.damping" && typeof value === "number") {
-      this.damping = Math.max(0.2, Math.min(40, value));
-      this.notify();
-      return true;
-    }
     if (key === "interaction.maxOffset" && typeof value === "number") {
-      this.maxOffset = Math.max(0.05, Math.min(2.5, value));
+      this.maxOffset = Math.max(0.1, Math.min(2, value));
       this.notify();
       return true;
     }
-    if (key === "interaction.innerRadius" && typeof value === "number") {
-      this.innerRadius = Math.max(0.01, Math.min(2, value));
+    if (key === "interaction.springK" && typeof value === "number") {
+      this.springK = Math.max(1, Math.min(120, value));
       this.notify();
       return true;
     }
-    if (key === "interaction.peakRadius" && typeof value === "number") {
-      this.peakRadius = Math.max(0.02, Math.min(3, value));
+    if (key === "interaction.springC" && typeof value === "number") {
+      this.springC = Math.max(0.1, Math.min(80, value));
       this.notify();
       return true;
     }
-    if (key === "interaction.outerRadius" && typeof value === "number") {
-      this.outerRadius = Math.max(0.03, Math.min(5, value));
+    if (key === "interaction.deformStrength" && typeof value === "number") {
+      this.deformStrength = Math.max(0, Math.min(2, value));
       this.notify();
       return true;
     }
-    if (key === "interaction.stretchStrength" && typeof value === "number") {
-      this.stretchStrength = Math.max(0, Math.min(3, value));
+    if (key === "interaction.deformRadius" && typeof value === "number") {
+      this.deformRadius = Math.max(0.1, Math.min(5, value));
       this.notify();
       return true;
     }
-    if (key === "interaction.stretchMax" && typeof value === "number") {
-      this.stretchMax = Math.max(0, Math.min(2, value));
+    if (key === "interaction.noiseAmp" && typeof value === "number") {
+      this.noiseAmp = Math.max(0, Math.min(1, value));
       this.notify();
       return true;
     }
-    if (key === "interaction.relaxSpeed" && typeof value === "number") {
-      this.relaxSpeed = Math.max(0.5, Math.min(40, value));
+    if (key === "interaction.tauPointer" && typeof value === "number") {
+      this.tauPointer = Math.max(0.01, Math.min(0.5, value));
       this.notify();
       return true;
     }
     if (key === "interaction.hoverBoost" && typeof value === "number") {
       this.hoverBoost = Math.max(1, Math.min(4, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.gateInner" && typeof value === "number") {
+      this.gateInner = Math.max(0, Math.min(2, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.gatePeak" && typeof value === "number") {
+      this.gatePeak = Math.max(0.01, Math.min(3, value));
+      this.notify();
+      return true;
+    }
+    if (key === "interaction.gateOuter" && typeof value === "number") {
+      this.gateOuter = Math.max(0.02, Math.min(6, value));
+      this.notify();
+      return true;
+    }
+    if (key === "cloud.sphereRadius" && typeof value === "number") {
+      this.sphereRadius = Math.max(0.2, Math.min(3, value));
+      this.notify();
+      return true;
+    }
+    if (key === "cloud.subdivisions" && typeof value === "number") {
+      this.subdivisions = Math.max(2, Math.min(8, Math.round(value)));
       this.notify();
       return true;
     }
@@ -229,7 +208,6 @@ export class CloudController {
     return false;
   }
 
-  // 开始一次过渡；transitionMs<=0 时立即切换。
   private startTransition(next: StateVisualInput, transitionMs: number): void {
     if (transitionMs <= 0) {
       this.state = { ...next };
@@ -245,36 +223,34 @@ export class CloudController {
     };
   }
 
-  // 构建一个给 UI/渲染层使用的只读快照。
   private snapshot(): ControllerSnapshot {
     const visual = mapStateToVisual(this.state);
-    if (this.pointSizeOverride !== null) {
-      visual.pointSize = this.pointSizeOverride;
-    }
+    if (this.pointSizeOverride !== null) visual.pointSize = this.pointSizeOverride;
     return {
       state: { ...this.state },
       visual,
       interactionMode: this.interactionMode,
-      attractStrength: this.attractStrength,
-      attractRadius: this.attractRadius,
-      stiffness: this.stiffness,
-      damping: this.damping,
       maxOffset: this.maxOffset,
-      innerRadius: this.innerRadius,
-      peakRadius: this.peakRadius,
-      outerRadius: this.outerRadius,
-      stretchStrength: this.stretchStrength,
-      stretchMax: this.stretchMax,
-      relaxSpeed: this.relaxSpeed,
+      springK: this.springK,
+      springC: this.springC,
+      deformStrength: this.deformStrength,
+      deformRadius: this.deformRadius,
+      noiseAmp: this.noiseAmp,
+      tauPointer: this.tauPointer,
       hoverBoost: this.hoverBoost,
+      gateInner: this.gateInner,
+      gatePeak: this.gatePeak,
+      gateOuter: this.gateOuter,
+      sphereRadius: this.sphereRadius,
+      subdivisions: this.subdivisions,
       paused: this.paused,
       bloomEnabled: this.bloomEnabled
     };
   }
 
-  // 通知所有订阅者。
   private notify(): void {
     const snap = this.snapshot();
     this.listeners.forEach((cb) => cb(snap));
   }
 }
+

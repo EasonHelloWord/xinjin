@@ -30,6 +30,7 @@ export function HomePage(): JSX.Element {
   const [wsStatus, setWsStatus] = useState<WsConnectionState>("closed");
   const [message, setMessage] = useState<string>("");
   const [showVideoPanel, setShowVideoPanel] = useState(false);
+  const [showDebug, setShowDebug] = useState(true);
 
   useEffect(() => {
     const off = controller.onSnapshot((snap) => setSnapshot(snap));
@@ -112,12 +113,10 @@ export function HomePage(): JSX.Element {
         const mode = controller.getInteractionMode();
         controller.setInteractionMode(mode === "gravity" ? "off" : "gravity");
       }
-      if (e.key.toLowerCase() === "b") {
-        controller.toggleBloom();
-      }
-      if (e.key.toLowerCase() === "p") {
-        controller.togglePause();
-      }
+      if (e.key.toLowerCase() === "b") controller.toggleBloom();
+      if (e.key.toLowerCase() === "p") controller.togglePause();
+      if (e.key === "0") controller.setPreset("neutral", undefined, 300);
+      if (e.key.toLowerCase() === "m") setShowDebug((v) => !v);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -128,202 +127,128 @@ export function HomePage(): JSX.Element {
   return (
     <div className="home-layout">
       <div className="cloud-stage" ref={canvasRef} />
-      <aside className="side-panel">
-        <h2>状态面板</h2>
-        <div className="status-row">
-          <span>WS</span>
-          <span className={`status-dot ${wsStatus}`}>{wsStatus}</span>
-        </div>
-        <div className="status-row">
-          <span>FPS</span>
-          <span>{fps.toFixed(1)}</span>
-        </div>
-        {message && <div className="message-box">{message}</div>}
+      {showDebug && (
+        <aside className="side-panel">
+          <h2>状态面板</h2>
+          <div className="status-row">
+            <span>WS</span>
+            <span className={`status-dot ${wsStatus}`}>{wsStatus}</span>
+          </div>
+          <div className="status-row">
+            <span>FPS</span>
+            <span>{fps.toFixed(1)}</span>
+          </div>
+          {message && <div className="message-box">{message}</div>}
 
-        <label>Preset</label>
-        <select
-          value={preset}
-          onChange={(e) => {
-            const next = e.target.value as PresetName;
-            setPreset(next);
-            controller.setPreset(next, undefined, 700);
-          }}
-        >
-          {Object.keys(PRESETS).map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
+          <label>Preset</label>
+          <select
+            value={preset}
+            onChange={(e) => {
+              const next = e.target.value as PresetName;
+              setPreset(next);
+              controller.setPreset(next, undefined, 700);
+            }}
+          >
+            {Object.keys(PRESETS).map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+
+          {stateKeys.map((key) => (
+            <label key={key}>
+              {key}: {currentState[key].toFixed(2)}
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={currentState[key]}
+                onChange={(e) => controller.setState({ [key]: Number(e.target.value) }, 240)}
+              />
+            </label>
           ))}
-        </select>
 
-        {stateKeys.map((key) => (
-          <label key={key}>
-            {key}: {currentState[key].toFixed(2)}
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={currentState[key]}
-              onChange={(e) => controller.setState({ [key]: Number(e.target.value) }, 240)}
-            />
+          <label>maxOffset
+            <input type="range" min={0.1} max={1.5} step={0.01}
+              value={snapshot?.maxOffset ?? APP_CONFIG.interaction.maxOffset}
+              onChange={(e) => controller.applyConfig("interaction.maxOffset", Number(e.target.value))}/>
           </label>
-        ))}
+          <label>springK
+            <input type="range" min={1} max={80} step={0.1}
+              value={snapshot?.springK ?? APP_CONFIG.interaction.springK}
+              onChange={(e) => controller.applyConfig("interaction.springK", Number(e.target.value))}/>
+          </label>
+          <label>springC
+            <input type="range" min={0.1} max={30} step={0.1}
+              value={snapshot?.springC ?? APP_CONFIG.interaction.springC}
+              onChange={(e) => controller.applyConfig("interaction.springC", Number(e.target.value))}/>
+          </label>
+          <label>deformStrength
+            <input type="range" min={0} max={1} step={0.01}
+              value={snapshot?.deformStrength ?? APP_CONFIG.interaction.deformStrength}
+              onChange={(e) => controller.applyConfig("interaction.deformStrength", Number(e.target.value))}/>
+          </label>
+          <label>deformRadius
+            <input type="range" min={0.2} max={3} step={0.01}
+              value={snapshot?.deformRadius ?? APP_CONFIG.interaction.deformRadius}
+              onChange={(e) => controller.applyConfig("interaction.deformRadius", Number(e.target.value))}/>
+          </label>
+          <label>noiseAmp
+            <input type="range" min={0} max={0.6} step={0.01}
+              value={snapshot?.noiseAmp ?? APP_CONFIG.interaction.noiseAmp}
+              onChange={(e) => controller.applyConfig("interaction.noiseAmp", Number(e.target.value))}/>
+          </label>
+          <label>tauPointer
+            <input type="range" min={0.01} max={0.3} step={0.01}
+              value={snapshot?.tauPointer ?? APP_CONFIG.interaction.tauPointer}
+              onChange={(e) => controller.applyConfig("interaction.tauPointer", Number(e.target.value))}/>
+          </label>
+          <label>hoverBoost
+            <input type="range" min={1} max={3} step={0.01}
+              value={snapshot?.hoverBoost ?? APP_CONFIG.interaction.hoverBoost}
+              onChange={(e) => controller.applyConfig("interaction.hoverBoost", Number(e.target.value))}/>
+          </label>
+          <label>gateInner
+            <input type="range" min={0} max={1} step={0.01}
+              value={snapshot?.gateInner ?? APP_CONFIG.interaction.gateInner}
+              onChange={(e) => controller.applyConfig("interaction.gateInner", Number(e.target.value))}/>
+          </label>
+          <label>gatePeak
+            <input type="range" min={0.1} max={2} step={0.01}
+              value={snapshot?.gatePeak ?? APP_CONFIG.interaction.gatePeak}
+              onChange={(e) => controller.applyConfig("interaction.gatePeak", Number(e.target.value))}/>
+          </label>
+          <label>gateOuter
+            <input type="range" min={0.2} max={3} step={0.01}
+              value={snapshot?.gateOuter ?? APP_CONFIG.interaction.gateOuter}
+              onChange={(e) => controller.applyConfig("interaction.gateOuter", Number(e.target.value))}/>
+          </label>
 
-        <label>
-          attractStrength
-          <input
-            type="range"
-            min={0}
-            max={2}
-            step={0.01}
-            value={snapshot?.attractStrength ?? APP_CONFIG.interaction.attractStrength}
-            onChange={(e) => controller.applyConfig("interaction.attractStrength", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          attractRadius
-          <input
-            type="range"
-            min={0.2}
-            max={3}
-            step={0.01}
-            value={snapshot?.attractRadius ?? APP_CONFIG.interaction.attractRadius}
-            onChange={(e) => controller.applyConfig("interaction.attractRadius", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          stiffness
-          <input
-            type="range"
-            min={1}
-            max={40}
-            step={0.1}
-            value={snapshot?.stiffness ?? APP_CONFIG.interaction.stiffness}
-            onChange={(e) => controller.applyConfig("interaction.stiffness", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          damping
-          <input
-            type="range"
-            min={0.2}
-            max={20}
-            step={0.1}
-            value={snapshot?.damping ?? APP_CONFIG.interaction.damping}
-            onChange={(e) => controller.applyConfig("interaction.damping", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          stretchStrength
-          <input
-            type="range"
-            min={0}
-            max={2}
-            step={0.01}
-            value={snapshot?.stretchStrength ?? APP_CONFIG.interaction.stretchStrength}
-            onChange={(e) => controller.applyConfig("interaction.stretchStrength", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          stretchMax
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={snapshot?.stretchMax ?? APP_CONFIG.interaction.stretchMax}
-            onChange={(e) => controller.applyConfig("interaction.stretchMax", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          hoverBoost
-          <input
-            type="range"
-            min={1}
-            max={3}
-            step={0.01}
-            value={snapshot?.hoverBoost ?? APP_CONFIG.interaction.hoverBoost}
-            onChange={(e) => controller.applyConfig("interaction.hoverBoost", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          maxOffset
-          <input
-            type="range"
-            min={0.05}
-            max={1.2}
-            step={0.01}
-            value={snapshot?.maxOffset ?? APP_CONFIG.interaction.maxOffset}
-            onChange={(e) => controller.applyConfig("interaction.maxOffset", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          innerRadius
-          <input
-            type="range"
-            min={0.01}
-            max={1.5}
-            step={0.01}
-            value={snapshot?.innerRadius ?? APP_CONFIG.interaction.innerRadius}
-            onChange={(e) => controller.applyConfig("interaction.innerRadius", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          peakRadius
-          <input
-            type="range"
-            min={0.05}
-            max={2}
-            step={0.01}
-            value={snapshot?.peakRadius ?? APP_CONFIG.interaction.peakRadius}
-            onChange={(e) => controller.applyConfig("interaction.peakRadius", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          outerRadius
-          <input
-            type="range"
-            min={0.1}
-            max={3}
-            step={0.01}
-            value={snapshot?.outerRadius ?? APP_CONFIG.interaction.outerRadius}
-            onChange={(e) => controller.applyConfig("interaction.outerRadius", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          relaxSpeed
-          <input
-            type="range"
-            min={1}
-            max={30}
-            step={0.1}
-            value={snapshot?.relaxSpeed ?? APP_CONFIG.interaction.relaxSpeed}
-            onChange={(e) => controller.applyConfig("interaction.relaxSpeed", Number(e.target.value))}
-          />
-        </label>
-
-        <div className="btn-row">
-          {modeOrder.map((mode) => (
-            <button
-              key={mode}
-              className={snapshot?.interactionMode === mode ? "active" : ""}
-              onClick={() => controller.setInteractionMode(mode)}
-            >
-              {mode}
+          <div className="btn-row">
+            {modeOrder.map((mode) => (
+              <button
+                key={mode}
+                className={snapshot?.interactionMode === mode ? "active" : ""}
+                onClick={() => controller.setInteractionMode(mode)}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+          <div className="btn-row">
+            <button onClick={() => controller.toggleBloom()}>
+              Bloom: {snapshot?.bloomEnabled ? "On" : "Off"}
             </button>
-          ))}
-        </div>
-        <div className="btn-row">
-          <button onClick={() => controller.toggleBloom()}>
-            Bloom: {snapshot?.bloomEnabled ? "On" : "Off"}
-          </button>
-          <button onClick={() => controller.togglePause()}>{snapshot?.paused ? "继续" : "暂停"}</button>
-        </div>
-        <pre>{JSON.stringify(currentState, null, 2)}</pre>
-      </aside>
+            <button onClick={() => controller.togglePause()}>{snapshot?.paused ? "继续" : "暂停"}</button>
+          </div>
+          <pre>{JSON.stringify(currentState, null, 2)}</pre>
+        </aside>
+      )}
       <ChatDock onOpenVideoPanel={() => setShowVideoPanel(true)} />
       <VideoPanel open={showVideoPanel} onClose={() => setShowVideoPanel(false)} />
     </div>
   );
 }
+

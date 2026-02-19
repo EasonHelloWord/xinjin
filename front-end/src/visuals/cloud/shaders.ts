@@ -1,23 +1,20 @@
 export const cloudVertexShader = `
-attribute vec3 aRandom;
 uniform float uTime;
+uniform vec3 uOffset;
+uniform vec3 uAttractor;
+uniform float uDeformStrength;
+uniform float uDeformRadius;
 uniform float uNoiseAmp;
-uniform float uNoiseFreq;
-uniform float uJitter;
-uniform float uPointSize;
+uniform float uGateInner;
+uniform float uGatePeak;
+uniform float uGateOuter;
 uniform float uBreathHz;
 uniform float uBreathJitter;
-uniform float uSocialSink;
-uniform float uDensity;
-uniform vec3 uPointer;
-uniform vec3 uOffset;
-uniform vec3 uDir;
-uniform float uStretch;
-uniform float uDetailAmount;
 uniform int uInteractionMode;
-uniform float uClickBoost;
-varying float vMix;
-varying float vAlpha;
+varying vec3 vWorldPos;
+varying vec3 vNormalW;
+varying float vGate;
+varying float vNoise;
 
 float hash(vec3 p) {
   p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
@@ -47,63 +44,56 @@ float noise3(vec3 p) {
 }
 
 void main() {
-  vec3 p0 = position;
-  vec3 p = p0;
-  float timeScale = uTime * 6.2831853;
+  vec3 p = position;
+  vec3 n = normalize(normal);
+  float breath = sin(uTime * 6.2831853 * (uBreathHz + uBreathJitter * 0.2)) * 0.03;
+  p *= 1.0 + breath;
 
-  float breath = sin(timeScale * uBreathHz + aRandom.x * 9.0) * (0.03 + uDensity * 0.08);
-  breath += sin(timeScale * (uBreathHz + uBreathJitter) + aRandom.y * 4.0) * 0.02;
+  vec3 pw = p + uOffset;
+  vec3 toA = uAttractor - pw;
+  float dist = length(toA);
+  float w = exp(-(dist * dist) / (2.0 * uDeformRadius * uDeformRadius));
+  vec3 dir = normalize(toA + vec3(1e-6));
+  vec3 ddir = normalize(mix(n, dir, 0.6));
 
-  float n = noise3(p * uNoiseFreq + vec3(uTime * 0.17));
-  p *= (1.0 + breath + (n - 0.5) * uNoiseAmp);
-  p += (aRandom - 0.5) * uJitter * (0.4 + sin(uTime * 1.5 + aRandom.z * 20.0) * 0.6);
+  float centerDist = length(uAttractor - uOffset);
+  float gateA = smoothstep(uGateInner, uGatePeak, centerDist);
+  float gateB = 1.0 - smoothstep(uGatePeak, uGateOuter, centerDist);
+  float centerGate = gateA * gateB;
+  if (uInteractionMode == 0) centerGate = 0.0;
 
-  // Layer B: anisotropic stretch around center (volume-like pull).
-  vec3 d = normalize(uDir + vec3(1e-5));
-  float axial = dot(p0, d);
-  vec3 axialV = d * axial;
-  vec3 radialV = p0 - axialV;
-  float stretch = uStretch;
-  p += axialV * stretch - radialV * (stretch * 0.5);
+  float ns = noise3(pw * 2.2 + vec3(uTime * 0.45));
+  vec3 displacement = ddir * w * uDeformStrength * centerGate;
+  displacement += n * (ns - 0.5) * uNoiseAmp * 0.08 * centerGate;
+  p += displacement;
 
-  // Layer A: center-of-mass global offset.
-  p += uOffset;
-
-  // Layer C: small local disturbance near pointer (<= 20% subjective weight).
-  if (uInteractionMode != 0) {
-    vec3 toPointer = uPointer - p;
-    float dist = length(toPointer);
-    float local = smoothstep(1.6, 0.0, dist) * uDetailAmount;
-    vec3 t = normalize(vec3(-toPointer.y, toPointer.x, 0.0) + vec3(1e-5));
-    p += t * sin(uTime * 9.0 + aRandom.z * 14.0) * local * (0.06 * uClickBoost);
-  }
-
-  float edge = smoothstep(0.4, 1.8, length(p));
-  p.y -= uSocialSink * edge;
-
-  vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
-  gl_Position = projectionMatrix * mvPosition;
-  gl_PointSize = uPointSize * (300.0 / -mvPosition.z) * (0.75 + uDensity * 0.7);
-  gl_PointSize = clamp(gl_PointSize, 1.0, 8.0);
-
-  vMix = clamp(length(p) / 2.2, 0.0, 1.0);
-  vAlpha = mix(0.25, 0.95, 1.0 - edge);
+  vec4 worldPos = modelMatrix * vec4(p, 1.0);
+  vWorldPos = worldPos.xyz;
+  vNormalW = normalize(mat3(modelMatrix) * n);
+  vGate = centerGate;
+  vNoise = ns;
+  gl_Position = projectionMatrix * viewMatrix * worldPos;
 }
 `;
 
 export const cloudFragmentShader = `
 uniform vec3 uColorA;
 uniform vec3 uColorB;
-varying float vMix;
-varying float vAlpha;
+uniform float uNoiseAmp;
+varying vec3 vWorldPos;
+varying vec3 vNormalW;
+varying float vGate;
+varying float vNoise;
 
 void main() {
-  vec2 uv = gl_PointCoord - vec2(0.5);
-  float dist = length(uv);
-  float soft = smoothstep(0.55, 0.0, dist);
-  float alpha = soft * vAlpha;
-  if (alpha < 0.01) discard;
-  vec3 color = mix(uColorA, uColorB, vMix);
+  vec3 viewDir = normalize(cameraPosition - vWorldPos);
+  float fresnel = pow(1.0 - abs(dot(normalize(vNormalW), viewDir)), 1.8);
+  float alpha = mix(0.22, 0.72, fresnel);
+  alpha *= (1.0 - (vNoise - 0.5) * uNoiseAmp * 0.6);
+  alpha *= mix(0.85, 1.0, vGate);
+  alpha = clamp(alpha, 0.04, 0.95);
+
+  vec3 color = mix(uColorA, uColorB, clamp(fresnel * 0.7 + 0.2, 0.0, 1.0));
   gl_FragColor = vec4(color, alpha);
 }
 `;
