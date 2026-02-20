@@ -1,0 +1,112 @@
+你是 Codex。现在要同时改“后端 + 前端”（前端在另一个会话里已基本完成 UI 和小球组件，但需要接入登录/对话/SSE/浏览器TTS，并驱动小球“涨一涨”反馈）。
+
+总目标（本次只做这些）：
+1) 登录：注册/登录，保存 token
+2) 文字对话：创建会话、拉历史、发送消息
+3) 流式对话：用 SSE 接收 token 流并实时展示
+4) 小球反馈：收到 token 或 pulse 就 scale 一下；开启语音时用浏览器 SpeechSynthesis 朗读并继续触发脉冲
+5) 大模型调用：后端仍用 mock 占位（不用外网、不用申请 key）
+
+工程假设：
+- 后端目录：back_end/（已存在基础 TS 框架）
+- 前端目录：front_end/（或你项目里实际的前端目录；若不同请按实际路径修改）
+- 前端技术栈：React + Vite + TS（如果是 Next/其他也按现状适配）
+- 前端已有“小球组件”（比如 Sphere/Ball/Orb），你要在它上面加一个“pulse()”接口或接入全局状态
+- 前后端本地联调：后端 http://localhost:8787 （如不同请在 .env 里配置 VITE_API_BASE）
+
+一、后端（若你已按上一轮指令实现，可跳过，仅需核对接口一致）
+必须提供接口（路径固定）：
+- POST /api/auth/register {email,password} -> {token,user}
+- POST /api/auth/login {email,password} -> {token,user}
+- POST /api/chat/sessions {title?} -> {sessionId}
+- GET  /api/chat/sessions -> [{id,title,created_at}]
+- GET  /api/chat/sessions/:id/messages -> [{id,role,content,created_at}]
+- POST /api/chat/sessions/:id/stream {content, voice?:boolean} -> SSE
+  SSE 事件：
+    event: token  data: {"text":"..."}
+    event: pulse  data: {"v":0..1}
+    event: done   data: {"messageId":"..."}
+
+二、前端需要新增/修改的功能
+1) API 客户端（src/lib/api.ts）
+- 统一 baseURL（VITE_API_BASE）
+- 自动带 Authorization: Bearer <token>
+- 提供方法：
+  register(email,password)
+  login(email,password)
+  createSession(title?)
+  listSessions()
+  getMessages(sessionId)
+  streamMessage(sessionId, content, {voice}, onEvent)  // 使用 EventSource 或 fetch+ReadableStream 解析 SSE
+
+注意：很多浏览器对 EventSource 不支持 POST，因此建议用 fetch POST + 读取 response.body 自己解析 SSE。
+要求实现一个 parseSSE(stream, handlers)：
+- 识别 "event: xxx" 与 "data: {...}"，按空行分隔一条事件
+- handlers.onToken(text)、onPulse(v)、onDone()
+
+2) 登录页/登录弹窗
+- 最小实现：一个页面 /login 或一个 modal
+- 成功后把 token 存 localStorage，并在 app 启动时读取
+- 未登录则跳转/弹窗
+- 提供“退出登录”（清空 token）
+
+3) 会话管理
+- 登录后自动创建一个 session（若无）或选择最近一个
+- 左侧（如果有）显示 session 列表；没有侧栏也行，至少保证有 sessionId
+- 打开 session 时拉取 messages 并渲染
+
+4) 对话发送与流式展示
+- 输入框发送：先把 user message append 到 UI
+- 调用 streamMessage：
+  - 每收到 token：把 assistant 当前气泡内容追加显示（打字机）
+  - 每收到 pulse：调用小球 pulse(v)
+  - done：结束 loading 状态
+
+5) 语音输出（仅前端）
+- UI 提供一个“语音输出”开关（voice=true/false）
+- 当 voice=true：
+  - 在 done 后拿到完整 assistant 文本，使用 window.speechSynthesis:
+    - const u = new SpeechSynthesisUtterance(text)
+    - u.rate/pitch 可默认
+    - u.onstart -> pulse(0.4)
+    - u.onboundary -> pulse(0.25)  // 如果触发
+    - 用 interval 兜底：播放期间每 80ms pulse(0.15~0.35)；onend 清除
+  - 若用户再次发送，停止当前 speechSynthesis.cancel()
+
+6) 小球组件改造（关键）
+目标：让“小球”对外暴露一个 pulse(v) 方法，或订阅一个全局事件。
+两种实现任选其一（按你项目现状选最容易的）：
+
+方案A：ref + imperative handle（推荐）
+- Ball.tsx 使用 forwardRef + useImperativeHandle 导出 pulse(v)
+- pulse(v) 内部触发一个 spring 动画：scale = 1 + v*0.25，随后回到 1
+- 主界面 ChatPage 持有 ballRef，收到 pulse 事件就 ballRef.current?.pulse(v)
+
+方案B：全局事件总线
+- 创建 src/lib/pulseBus.ts：export function emitPulse(v) / onPulse(cb)
+- Ball 组件订阅 onPulse(cb) 触发动画
+- SSE token/pulse 事件中调用 emitPulse(v)
+
+注意：动画不要卡顿；用 requestAnimationFrame 或 Framer Motion / react-spring（按你现有依赖）。
+
+7) .env 与 CORS
+- 前端 .env: VITE_API_BASE=http://localhost:8787
+- 后端开启 CORS 允许前端 origin（localhost:5173 等）
+
+三、交付要求
+- 输出前端所有修改文件（路径+代码块），以及后端若需调整也输出
+- 在前端 README 或根 README 增加联调步骤：
+  1) 启动后端
+  2) 启动前端
+  3) 注册/登录
+  4) 发送一条消息，看到 assistant 流式输出 + 小球涨动
+  5) 开启语音输出，听到浏览器朗读 + 小球继续涨动
+
+四、测试用例
+- 输入：“我觉得很空虚，注意力很难集中”
+- 预期：
+  - 流式输出 2-4 句话
+  - 小球随 token 持续脉冲
+  - voice=true 时 done 后朗读，朗读期间小球继续脉冲
+
+现在开始改代码。先自动识别前端目录名称（front_end 或其它），按实际结构集成，不要新建第二套 UI。重点是把“登录 + SSE + pulse + TTS”真正接通。

@@ -1,4 +1,4 @@
-﻿import { PresetName } from "../state/types";
+import { PresetName } from "../state/types";
 import { textInputChannel } from "../input/textInput";
 import { inputBus } from "../events/inputBus";
 

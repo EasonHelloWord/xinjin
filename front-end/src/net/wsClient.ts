@@ -1,4 +1,4 @@
-﻿import { APP_CONFIG } from "../config";
+import { APP_CONFIG } from "../config";
 import { InteractionMode, PresetName, StateVisualInput } from "../state/types";
 
 type WsEnvelope<TPayload = Record<string, unknown>> = {

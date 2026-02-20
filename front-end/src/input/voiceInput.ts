@@ -7,10 +7,18 @@ interface VoiceMeter {
   bins: Uint8Array<ArrayBuffer>;
 }
 
+interface VoiceEnvelope {
+  type?: string;
+  payload?: {
+    text?: string;
+  };
+}
+
 export class VoiceInput {
   private status: VoiceStatus = "idle";
   private statusListeners = new Set<(status: VoiceStatus) => void>();
   private meterListeners = new Set<(meter: VoiceMeter) => void>();
+  private transcriptListeners = new Set<(text: string) => void>();
   private mediaStream: MediaStream | null = null;
   private mediaRecorder: MediaRecorder | null = null;
   private ws: WebSocket | null = null;
@@ -37,6 +45,11 @@ export class VoiceInput {
   onMeter(cb: (meter: VoiceMeter) => void): () => void {
     this.meterListeners.add(cb);
     return () => this.meterListeners.delete(cb);
+  }
+
+  onTranscript(cb: (text: string) => void): () => void {
+    this.transcriptListeners.add(cb);
+    return () => this.transcriptListeners.delete(cb);
   }
 
   async start(): Promise<void> {
@@ -78,6 +91,26 @@ export class VoiceInput {
       ws.binaryType = "arraybuffer";
       ws.onopen = () => resolve();
       ws.onerror = () => reject(new Error("voice socket error"));
+      ws.onmessage = (event) => {
+        const text = typeof event.data === "string" ? event.data : "";
+        if (!text) return;
+
+        let parsed: VoiceEnvelope;
+        try {
+          parsed = JSON.parse(text) as VoiceEnvelope;
+        } catch {
+          return;
+        }
+
+        const transcript =
+          parsed.type === "voice_transcript" && typeof parsed.payload?.text === "string"
+            ? parsed.payload.text
+            : undefined;
+
+        if (transcript && transcript.trim()) {
+          this.transcriptListeners.forEach((cb) => cb(transcript.trim()));
+        }
+      };
       ws.onclose = () => {
         if (this.status === "recording" || this.status === "connecting") {
           this.stop();

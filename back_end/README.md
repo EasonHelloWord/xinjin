@@ -1,10 +1,10 @@
 # xinjin-backend
 
-Node.js + TypeScript minimal backend for the xinjin front-end.
+Node.js + TypeScript backend for xinjin.
 
 ## Requirements
 
-- Node.js 18+ (works on Node.js 20+)
+- Node.js 18+
 
 ## Run
 
@@ -21,79 +21,106 @@ npm run build
 npm run start
 ```
 
-## WebSocket Endpoints
+## Environment
+
+- `JWT_SECRET` (optional): JWT signing secret. Default is `dev-secret-change-me`.
+
+## Storage
+
+- SQLite file: `back_end/data/xinjin.sqlite`
+- Tables:
+  - `users(id, email, password_hash, created_at)`
+  - `sessions(id, user_id, title, created_at)`
+  - `messages(id, session_id, role, content, created_at)`
+
+## HTTP API
+
+### Auth
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+
+Body:
+
+```json
+{
+  "email": "user@example.com",
+  "password": "12345678"
+}
+```
+
+Response:
+
+```json
+{
+  "token": "jwt-token",
+  "user": {
+    "id": "uuid",
+    "email": "user@example.com",
+    "createdAt": 1700000000000
+  }
+}
+```
+
+### Chat
+
+- `POST /api/chat/sessions` `{ "title"?: "..." }`
+- `GET /api/chat/sessions`
+- `GET /api/chat/sessions/:id/messages`
+- `POST /api/chat/sessions/:id/messages` `{ "content": "..." }`
+- `POST /api/chat/sessions/:id/stream` `{ "content": "...", "voice"?: true }`
+
+`GET /api/chat/sessions` response item:
+
+```json
+{ "id": "uuid", "title": "My Session", "created_at": 1700000000000 }
+```
+
+`GET /api/chat/sessions/:id/messages` response item:
+
+```json
+{ "id": "uuid", "role": "assistant", "content": "...", "created_at": 1700000000000 }
+```
+
+SSE stream events:
+
+- `event: token` with `{"text":"..."}`
+- `event: pulse` with `{"v":0.15-0.45}`
+- `event: done` with `{"messageId":"..."}`
+
+## WebSocket Endpoints (existing)
 
 - Main WS: `ws://localhost:8787`
 - Voice placeholder WS: `ws://localhost:8787/voice`
 
-## Protocol Envelope
+## Curl Examples
 
-All main WS messages use this envelope:
+1. Register / Login
 
-```json
-{
-  "v": 1,
-  "type": "xxx",
-  "ts": 1700000000000,
-  "reqId": "optional-string",
-  "payload": {}
-}
+```bash
+curl -X POST http://localhost:8787/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"user@example.com\",\"password\":\"12345678\"}"
+
+curl -X POST http://localhost:8787/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"user@example.com\",\"password\":\"12345678\"}"
 ```
 
-## Example Messages
+2. Create Session
 
-Client -> Server `hello`:
-
-```json
-{
-  "v": 1,
-  "type": "hello",
-  "ts": 1700000000000,
-  "payload": {
-    "client": "front-end",
-    "version": "any-string"
-  }
-}
+```bash
+curl -X POST http://localhost:8787/api/chat/sessions \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d "{\"title\":\"My Session\"}"
 ```
 
-Client -> Server `text_input`:
+3. Send Stream Message (`curl -N`)
 
-```json
-{
-  "v": 1,
-  "type": "text_input",
-  "ts": 1700000000001,
-  "reqId": "req-1",
-  "payload": {
-    "text": "我有点焦虑"
-  }
-}
-```
-
-Server -> Client `hello_ack`:
-
-```json
-{
-  "v": 1,
-  "type": "hello_ack",
-  "ts": 1700000000002,
-  "payload": {
-    "back_end": "xinjin-backend",
-    "version": "1.0",
-    "sessionId": "f2b89ca1-8c58-46c6-8a31-2f8c36253ba8"
-  }
-}
-```
-
-Voice WS on connect:
-
-```json
-{
-  "v": 1,
-  "type": "voice_ready",
-  "ts": 1700000000003,
-  "payload": {
-    "mode": "placeholder"
-  }
-}
+```bash
+curl -N -X POST http://localhost:8787/api/chat/sessions/<SESSION_ID>/stream \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d "{\"content\":\"I feel overwhelmed and want to plan my next step\",\"voice\":true}"
 ```

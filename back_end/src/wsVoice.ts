@@ -20,7 +20,6 @@ const send = <TPayload extends VoicePayload>(socket: WebSocket, type: string, pa
 
 export const registerVoiceWs = async (fastify: FastifyInstance): Promise<void> => {
   fastify.get("/voice", { websocket: true }, (socket) => {
-
     send(socket, "voice_ready", {
       mode: "placeholder"
     });
@@ -28,7 +27,7 @@ export const registerVoiceWs = async (fastify: FastifyInstance): Promise<void> =
     socket.on("message", () => {
       // Placeholder path: acknowledge every packet and return a fake transcript.
       send(socket, "voice_transcript", {
-        text: "（语音转文本占位）我现在有点累"
+        text: "\uff08\u8bed\u97f3\u8f6c\u6587\u672c\u5360\u4f4d\uff09\u6211\u73b0\u5728\u6709\u70b9\u7d2f\u3002"
       });
       send(socket, "suggested_preset", {
         name: "tired"
