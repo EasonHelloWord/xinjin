@@ -87,14 +87,15 @@ varying float vNoise;
 
 void main() {
   vec3 viewDir = normalize(cameraPosition - vWorldPos);
-  float fresnel = pow(1.0 - abs(dot(normalize(vNormalW), viewDir)), 1.8);
-  float alpha = mix(0.22, 0.72, fresnel);
+  float rim = pow(1.0 - abs(dot(normalize(vNormalW), viewDir)), 2.8);
+  float alpha = mix(0.28, 0.82, clamp(rim * 1.15 + 0.04, 0.0, 1.0));
   alpha *= (1.0 - (vNoise - 0.5) * uNoiseAmp * 0.6);
   alpha *= mix(0.85, 1.0, vGate);
   alpha = clamp(alpha, 0.04, 0.95);
 
-  vec3 color = mix(uColorA, uColorB, clamp(fresnel * 0.7 + 0.2, 0.0, 1.0));
+  vec3 baseColor = mix(uColorA, uColorB, clamp(vNoise * 0.45 + 0.28, 0.0, 1.0));
+  vec3 rimTint = mix(uColorB, vec3(1.0), 0.52);
+  vec3 color = clamp(baseColor + rimTint * rim * 0.55, 0.0, 1.0);
   gl_FragColor = vec4(color, alpha);
 }
 `;
-

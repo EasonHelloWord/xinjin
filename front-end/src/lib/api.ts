@@ -71,6 +71,42 @@ export interface ChatMessage {
   created_at: number;
 }
 
+export type UserLevel = "healthy" | "mild" | "moderate" | "severe";
+export type StateType = "sensory_overload" | "emotional_block" | "mixed_fluctuation";
+
+export interface AssessmentResult {
+  id: string;
+  score: number;
+  level: UserLevel;
+  createdAt: number;
+}
+
+export interface AnalysisResult {
+  id: string;
+  assessmentId: string | null;
+  score: number | null;
+  level: UserLevel;
+  emotionTags: string[];
+  contradictions: string[];
+  summary: string;
+  stateType: StateType;
+  tcmAdvice: string[];
+  westernAdvice: string[];
+  microTasks: string[];
+  riskNotice?: string | null;
+  createdAt: number;
+}
+
+export interface ProfileSummary {
+  latestAssessment: (AssessmentResult & { answers: number[] }) | null;
+  latestAnalysis: (AnalysisResult & { inputText: string }) | null;
+}
+
+export interface ProfileTimeline {
+  assessments: Array<AssessmentResult & { answers: number[] }>;
+  analyses: Array<AnalysisResult & { inputText: string }>;
+}
+
 type SSEHandlers = {
   onToken?: (text: string) => void;
   onPulse?: (v: number) => void;
@@ -227,5 +263,29 @@ export const api = {
     }
 
     await parseSSE(res.body, handlers);
-  }
+  },
+
+  submitAssessment: (answers: number[]): Promise<AssessmentResult> =>
+    request<AssessmentResult>("/api/assessment/submit", {
+      method: "POST",
+      body: JSON.stringify({ answers })
+    }),
+
+  analyzeState: (
+    payload: {
+      assessmentId?: string;
+      text: string;
+      sleepHours?: number;
+      fatigueLevel?: number;
+      socialWillingness?: number;
+    }
+  ): Promise<AnalysisResult> =>
+    request<AnalysisResult>("/api/state/analyze", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
+  getProfileSummary: (): Promise<ProfileSummary> => request<ProfileSummary>("/api/profile/summary"),
+
+  getProfileTimeline: (): Promise<ProfileTimeline> => request<ProfileTimeline>("/api/profile/timeline")
 };

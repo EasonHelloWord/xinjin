@@ -5,7 +5,7 @@ export const APP_CONFIG = {
     autoDegradeFpsThreshold: 45,
     avgWindow: 30,
     sphereRadius: 1.0,
-    background: "#04070d",
+    background: "#f7f5f2",
     enableBloomByDefault: true,
     bloom: {
       strength: 0.5,
