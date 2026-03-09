@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { api, ChatMessage } from "../lib/api";
 import { clearAuthToken } from "../lib/auth";
 import { emitPulse } from "../lib/pulseBus";
@@ -240,9 +241,11 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
             tokenReceived = true;
             assistantTextRef.current += tokenText;
             emitPulse(0.16 + Math.random() * 0.12);
-            setMessages((prev) =>
-              prev.map((msg) => (msg.id === pendingAssistantId ? { ...msg, content: assistantTextRef.current } : msg))
-            );
+            flushSync(() => {
+              setMessages((prev) =>
+                prev.map((msg) => (msg.id === pendingAssistantId ? { ...msg, content: assistantTextRef.current } : msg))
+              );
+            });
           },
           onPulse: (v) => emitPulse(v),
           onDone: (messageId) => {

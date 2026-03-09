@@ -332,7 +332,8 @@ export const api = {
     if (token) headers.set("Authorization", `Bearer ${token}`);
 
     const ac = new AbortController();
-    const timeout = window.setTimeout(() => ac.abort(), 60_000);
+    // LLM first-token latency can be high; keep stream alive long enough.
+    const timeout = window.setTimeout(() => ac.abort(), 180_000);
 
     let res: Response;
     try {

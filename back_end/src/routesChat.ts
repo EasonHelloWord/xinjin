@@ -156,6 +156,8 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 const writeSseEvent = (reply: FastifyReply, event: string, data: Record<string, unknown>): void => {
   reply.raw.write(`event: ${event}\n`);
   reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+  const raw = reply.raw as FastifyReply["raw"] & { flush?: () => void };
+  if (typeof raw.flush === "function") raw.flush();
 };
 
 const randomIntInRange = (min: number, max: number): number =>
@@ -413,11 +415,6 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
       }
 
       const existingUser = userCid ? await getMessageByClientId(sessionId, userCid) : null;
-      const userMessage = existingUser || (await insertMessage(sessionId, "user", parsed.data.content, userCid));
-      const history = await getRecentHistory(sessionId, 20);
-      const assistantText = await generateAssistantReply(history);
-      const tokens = toStreamTokens(assistantText);
-
       reply.hijack();
       reply.raw.statusCode = 200;
       reply.raw.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -427,6 +424,7 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
       if (typeof reply.raw.flushHeaders === "function") {
         reply.raw.flushHeaders();
       }
+      writeSseEvent(reply, "pulse", { v: randomPulse() });
 
       let closed = false;
       request.raw.on("close", () => {
@@ -434,6 +432,11 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
       });
 
       try {
+        const userMessage = existingUser || (await insertMessage(sessionId, "user", parsed.data.content, userCid));
+        const history = await getRecentHistory(sessionId, 20);
+        const assistantText = await generateAssistantReply(history);
+        const tokens = toStreamTokens(assistantText);
+
         for (const token of tokens) {
           if (closed || reply.raw.writableEnded) {
             return;
