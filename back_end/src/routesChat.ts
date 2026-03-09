@@ -4,7 +4,7 @@ import { z } from "zod";
 import { authMiddleware } from "./authMiddleware";
 import { getDb } from "./db";
 import { badRequest, forbidden, notFound } from "./errors";
-import { ChatHistoryItem, generateMockAssistantReply, toStreamTokens } from "./mockLlm";
+import { ChatHistoryItem, generateAssistantReply, toStreamTokens } from "./mockLlm";
 
 const createSessionSchema = z.object({
   title: z.string().trim().min(1).max(120).optional()
@@ -12,7 +12,8 @@ const createSessionSchema = z.object({
 
 const streamMessageSchema = z.object({
   content: z.string().trim().min(1),
-  voice: z.boolean().optional()
+  voice: z.boolean().optional(),
+  clientMessageId: z.string().trim().min(8).max(128).optional()
 });
 
 type SessionRow = {
@@ -27,7 +28,29 @@ type MessageRow = {
   session_id: string;
   role: "user" | "assistant";
   content: string;
+  client_id?: string | null;
   created_at: number;
+};
+
+let messageClientIdColumnAvailable: boolean | null = null;
+
+const ensureMessageClientIdColumn = async (): Promise<boolean> => {
+  if (messageClientIdColumnAvailable !== null) return messageClientIdColumnAvailable;
+  const db = await getDb();
+  const columns = await db.all<{ name: string }[]>(`PRAGMA table_info(messages)`);
+  const hasClientId = columns.some((c) => c.name === "client_id");
+  if (!hasClientId) {
+    try {
+      await db.exec(`ALTER TABLE messages ADD COLUMN client_id TEXT`);
+      messageClientIdColumnAvailable = true;
+      return true;
+    } catch {
+      messageClientIdColumnAvailable = false;
+      return false;
+    }
+  }
+  messageClientIdColumnAvailable = true;
+  return true;
 };
 
 const asUserId = (request: FastifyRequest): string => {
@@ -140,6 +163,70 @@ const randomIntInRange = (min: number, max: number): number =>
 
 const randomPulse = (): number => Number((0.15 + Math.random() * 0.3).toFixed(3));
 
+const userClientId = (clientMessageId: string): string => `${clientMessageId}:u`;
+const assistantClientId = (clientMessageId: string): string => `${clientMessageId}:a`;
+
+const getMessageByClientId = async (sessionId: string, clientId: string): Promise<MessageRow | null> => {
+  if (!(await ensureMessageClientIdColumn())) {
+    return null;
+  }
+  const db = await getDb();
+  const row = await db.get<MessageRow>(
+    `
+      SELECT id, session_id, role, content, client_id, created_at
+      FROM messages
+      WHERE session_id = ? AND client_id = ?
+      LIMIT 1
+    `,
+    sessionId,
+    clientId
+  );
+  return row ?? null;
+};
+
+const insertMessage = async (
+  sessionId: string,
+  role: "user" | "assistant",
+  content: string,
+  clientId?: string
+): Promise<MessageRow> => {
+  const db = await getDb();
+  const hasClientId = await ensureMessageClientIdColumn();
+  if (hasClientId && clientId) {
+    const id = randomUUID();
+    const createdAt = Date.now();
+    await db.run(
+      "INSERT OR IGNORE INTO messages (id, session_id, role, content, client_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      id,
+      sessionId,
+      role,
+      content,
+      clientId,
+      createdAt
+    );
+    const existing = await getMessageByClientId(sessionId, clientId);
+    if (existing) return existing;
+  }
+
+  const row: MessageRow = {
+    id: randomUUID(),
+    session_id: sessionId,
+    role,
+    content,
+    client_id: hasClientId ? clientId ?? null : null,
+    created_at: Date.now()
+  };
+  await db.run(
+    "INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
+    row.id,
+    row.session_id,
+    row.role,
+    row.content,
+    row.created_at
+  );
+  return row;
+};
+
 export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void> => {
   fastify.route({
     method: "POST",
@@ -220,6 +307,74 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
 
   fastify.route<{ Params: { id: string } }>({
     method: "POST",
+    url: "/api/chat/sessions/:id/messages",
+    preHandler: authMiddleware,
+    handler: async (request, _reply: FastifyReply) => {
+      const parsed = streamMessageSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw badRequest("INVALID_INPUT", parsed.error.issues.map((item) => item.message).join("; "));
+      }
+
+      const userId = asUserId(request);
+      const sessionId = request.params.id;
+      await getOwnedSession(sessionId, userId);
+
+      const clientId = parsed.data.clientMessageId?.trim();
+      const userCid = clientId ? userClientId(clientId) : undefined;
+      const assistantCid = clientId ? assistantClientId(clientId) : undefined;
+
+      const existingAssistant = assistantCid ? await getMessageByClientId(sessionId, assistantCid) : null;
+      if (existingAssistant) {
+        const existingUser = userCid ? await getMessageByClientId(sessionId, userCid) : null;
+        return {
+          userMessage: existingUser
+            ? {
+                id: existingUser.id,
+                role: "user" as const,
+                content: existingUser.content,
+                created_at: existingUser.created_at
+              }
+            : {
+                id: randomUUID(),
+                role: "user" as const,
+                content: parsed.data.content,
+                created_at: existingAssistant.created_at
+              },
+          assistantMessage: {
+            id: existingAssistant.id,
+            role: "assistant" as const,
+            content: existingAssistant.content,
+            created_at: existingAssistant.created_at
+          }
+        };
+      }
+
+      const existingUser = userCid ? await getMessageByClientId(sessionId, userCid) : null;
+      const userMessage = existingUser || (await insertMessage(sessionId, "user", parsed.data.content, userCid));
+
+      const history = await getRecentHistory(sessionId, 20);
+      const assistantText = await generateAssistantReply(history);
+      const assistantMessage = await insertMessage(sessionId, "assistant", assistantText, assistantCid);
+
+      return {
+        userMessage: {
+          id: userMessage.id,
+          role: "user" as const,
+          content: userMessage.content,
+          created_at: userMessage.created_at
+        },
+        assistantMessage: {
+          id: assistantMessage.id,
+          role: "assistant" as const,
+          content: assistantMessage.content,
+          created_at: assistantMessage.created_at
+        }
+      };
+    }
+  });
+
+  fastify.route<{ Params: { id: string } }>({
+    method: "POST",
     url: "/api/chat/sessions/:id/stream",
     preHandler: authMiddleware,
     handler: async (request, reply: FastifyReply) => {
@@ -231,20 +386,36 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
       const userId = asUserId(request);
       const sessionId = request.params.id;
       await getOwnedSession(sessionId, userId);
-      const db = await getDb();
+      const clientId = parsed.data.clientMessageId?.trim();
+      const userCid = clientId ? userClientId(clientId) : undefined;
+      const assistantCid = clientId ? assistantClientId(clientId) : undefined;
 
-      const userMessageId = randomUUID();
-      await db.run(
-        "INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
-        userMessageId,
-        sessionId,
-        "user",
-        parsed.data.content,
-        Date.now()
-      );
+      const existingAssistant = assistantCid ? await getMessageByClientId(sessionId, assistantCid) : null;
+      if (existingAssistant) {
+        const tokens = toStreamTokens(existingAssistant.content);
+        reply.hijack();
+        reply.raw.statusCode = 200;
+        reply.raw.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+        reply.raw.setHeader("Cache-Control", "no-cache, no-transform");
+        reply.raw.setHeader("Connection", "keep-alive");
+        reply.raw.setHeader("X-Accel-Buffering", "no");
+        if (typeof reply.raw.flushHeaders === "function") {
+          reply.raw.flushHeaders();
+        }
+        for (const token of tokens) {
+          writeSseEvent(reply, "token", { text: token });
+          writeSseEvent(reply, "pulse", { v: randomPulse() });
+          await sleep(randomIntInRange(12, 22));
+        }
+        writeSseEvent(reply, "done", { messageId: existingAssistant.id });
+        reply.raw.end();
+        return;
+      }
 
+      const existingUser = userCid ? await getMessageByClientId(sessionId, userCid) : null;
+      const userMessage = existingUser || (await insertMessage(sessionId, "user", parsed.data.content, userCid));
       const history = await getRecentHistory(sessionId, 20);
-      const assistantText = generateMockAssistantReply(history);
+      const assistantText = await generateAssistantReply(history);
       const tokens = toStreamTokens(assistantText);
 
       reply.hijack();
@@ -262,28 +433,28 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
         closed = true;
       });
 
-      for (const token of tokens) {
-        if (closed || reply.raw.writableEnded) {
-          return;
+      try {
+        for (const token of tokens) {
+          if (closed || reply.raw.writableEnded) {
+            return;
+          }
+
+          writeSseEvent(reply, "token", { text: token });
+          writeSseEvent(reply, "pulse", { v: randomPulse() });
+          await sleep(randomIntInRange(30, 60));
         }
 
-        writeSseEvent(reply, "token", { text: token });
-        writeSseEvent(reply, "pulse", { v: randomPulse() });
-        await sleep(randomIntInRange(30, 60));
+        const assistantMessage = await insertMessage(sessionId, "assistant", assistantText, assistantCid);
+
+        writeSseEvent(reply, "done", { messageId: assistantMessage.id });
+        reply.raw.end();
+      } catch (err) {
+        fastify.log.error({ err }, "SSE stream failed");
+        if (!closed && !reply.raw.writableEnded) {
+          writeSseEvent(reply, "error", { message: "Stream interrupted" });
+          reply.raw.end();
+        }
       }
-
-      const messageId = randomUUID();
-      await db.run(
-        "INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
-        messageId,
-        sessionId,
-        "assistant",
-        assistantText,
-        Date.now()
-      );
-
-      writeSseEvent(reply, "done", { messageId });
-      reply.raw.end();
     }
   });
 };

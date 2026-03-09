@@ -1,6 +1,6 @@
 import { getAuthToken } from "./auth";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8787";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8787";
 
 type ApiErrorPayload = { error?: { code?: string; message?: string } };
 
@@ -8,6 +8,32 @@ const toErrorMessage = (fallback: string, payload: unknown): string => {
   if (!payload || typeof payload !== "object") return fallback;
   const typed = payload as ApiErrorPayload;
   return typed.error?.message || fallback;
+};
+
+const withHostFallback = (base: string): string[] => {
+  const set = new Set<string>([base]);
+  if (base.includes("localhost")) {
+    set.add(base.replace("localhost", "127.0.0.1"));
+  }
+  if (base.includes("127.0.0.1")) {
+    set.add(base.replace("127.0.0.1", "localhost"));
+  }
+  return Array.from(set);
+};
+
+const fetchWithFallback = async (path: string, init: RequestInit, base = API_BASE): Promise<Response> => {
+  const candidates = withHostFallback(base);
+  let lastError: unknown = null;
+
+  for (const candidate of candidates) {
+    try {
+      return await fetch(`${candidate}${path}`, init);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Network request failed");
 };
 
 const request = async <T>(
@@ -26,10 +52,16 @@ const request = async <T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers
-  });
+  let res: Response;
+  try {
+    res = await fetchWithFallback(path, {
+      ...init,
+      headers
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Network request failed";
+    throw new Error(`Network error: ${message}. API_BASE=${API_BASE}`);
+  }
 
   if (!res.ok) {
     let payload: unknown = undefined;
@@ -74,10 +106,24 @@ export interface ChatMessage {
 export type UserLevel = "healthy" | "mild" | "moderate" | "severe";
 export type StateType = "sensory_overload" | "emotional_block" | "mixed_fluctuation";
 
+export interface AssessmentSectionScores {
+  emotion: number;
+  selfAndRelation: number;
+  bodyAndVitality: number;
+  meaningAndHope: number;
+}
+
+export interface AdviceConfidence {
+  state: number;
+  tcm: number;
+  western: number;
+}
+
 export interface AssessmentResult {
   id: string;
   score: number;
   level: UserLevel;
+  sectionScores?: AssessmentSectionScores | null;
   createdAt: number;
 }
 
@@ -93,6 +139,7 @@ export interface AnalysisResult {
   tcmAdvice: string[];
   westernAdvice: string[];
   microTasks: string[];
+  confidence?: AdviceConfidence | null;
   riskNotice?: string | null;
   createdAt: number;
 }
@@ -111,6 +158,12 @@ type SSEHandlers = {
   onToken?: (text: string) => void;
   onPulse?: (v: number) => void;
   onDone?: (messageId: string) => void;
+  onError?: (message: string) => void;
+};
+
+type SendOptions = {
+  voice?: boolean;
+  clientMessageId?: string;
 };
 
 type SseEvent = {
@@ -142,63 +195,85 @@ const dispatchSseEvent = (evt: SseEvent, handlers: SSEHandlers): void => {
   if (evt.event === "done") {
     const messageId = (parsed as { messageId?: unknown }).messageId;
     if (typeof messageId === "string") handlers.onDone?.(messageId);
+    return;
+  }
+
+  if (evt.event === "error") {
+    const message = (parsed as { message?: unknown }).message;
+    if (typeof message === "string") {
+      handlers.onError?.(message);
+    } else {
+      handlers.onError?.("Stream error");
+    }
   }
 };
 
-export const parseSSE = async (
+const parseSseFrame = (rawFrame: string): SseEvent | null => {
+  const lines = rawFrame.split(/\r?\n/);
+  let eventName = "message";
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (!line || line.startsWith(":")) continue;
+    if (line.startsWith("event:")) {
+      eventName = line.slice(6).trim() || "message";
+      continue;
+    }
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trim());
+    }
+  }
+
+  if (dataLines.length === 0) return null;
+  return {
+    event: eventName,
+    data: dataLines.join("\n")
+  };
+};
+
+const consumeSSE = async (
   stream: ReadableStream<Uint8Array>,
   handlers: SSEHandlers
-): Promise<void> => {
+): Promise<{ doneReceived: boolean; tokenCount: number }> => {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let eventName = "message";
-  let dataLines: string[] = [];
-
-  const emit = (): void => {
-    if (dataLines.length === 0) return;
-    dispatchSseEvent({ event: eventName, data: dataLines.join("\n") }, handlers);
-    eventName = "message";
-    dataLines = [];
-  };
+  let doneReceived = false;
+  let tokenCount = 0;
 
   while (true) {
-    const { value, done } = await reader.read();
+    let next: ReadableStreamReadResult<Uint8Array>;
+    try {
+      next = await reader.read();
+    } catch {
+      throw new Error("Stream interrupted");
+    }
+    const { value, done } = next;
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      if (line === "") {
-        emit();
-        continue;
-      }
-      if (line.startsWith("event:")) {
-        eventName = line.slice(6).trim() || "message";
-        continue;
-      }
-      if (line.startsWith("data:")) {
-        dataLines.push(line.slice(5).trim());
-      }
+    const frames = buffer.split(/\r?\n\r?\n/);
+    buffer = frames.pop() ?? "";
+    for (const frame of frames) {
+      const evt = parseSseFrame(frame);
+      if (!evt) continue;
+      if (evt.event === "token") tokenCount += 1;
+      if (evt.event === "done") doneReceived = true;
+      dispatchSseEvent(evt, handlers);
     }
   }
 
   buffer += decoder.decode();
-  if (buffer.length) {
-    const lines = buffer.split(/\r?\n/);
-    for (const line of lines) {
-      if (line.startsWith("event:")) {
-        eventName = line.slice(6).trim() || "message";
-      } else if (line.startsWith("data:")) {
-        dataLines.push(line.slice(5).trim());
-      } else if (line === "") {
-        emit();
-      }
+  if (buffer.trim()) {
+    const evt = parseSseFrame(buffer);
+    if (evt) {
+      if (evt.event === "token") tokenCount += 1;
+      if (evt.event === "done") doneReceived = true;
+      dispatchSseEvent(evt, handlers);
     }
   }
-  emit();
+
+  return { doneReceived, tokenCount };
 };
 
 export const api = {
@@ -232,37 +307,82 @@ export const api = {
       method: "DELETE"
     }),
 
+  sendMessageOnce: (
+    sessionId: string,
+    content: string,
+    options: SendOptions
+  ): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage }> =>
+    request<{ userMessage: ChatMessage; assistantMessage: ChatMessage }>(`/api/chat/sessions/${sessionId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({
+        content,
+        voice: Boolean(options.voice),
+        clientMessageId: options.clientMessageId
+      })
+    }),
+
   streamMessage: async (
     sessionId: string,
     content: string,
-    options: { voice?: boolean },
+    options: SendOptions,
     handlers: SSEHandlers
   ): Promise<void> => {
     const token = getAuthToken();
     const headers = new Headers({ "Content-Type": "application/json" });
     if (token) headers.set("Authorization", `Bearer ${token}`);
 
-    const res = await fetch(`${API_BASE}/api/chat/sessions/${sessionId}/stream`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ content, voice: Boolean(options.voice) })
-    });
+    const ac = new AbortController();
+    const timeout = window.setTimeout(() => ac.abort(), 60_000);
+
+    let res: Response;
+    try {
+      res = await fetchWithFallback(`/api/chat/sessions/${sessionId}/stream`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          content,
+          voice: Boolean(options.voice),
+          clientMessageId: options.clientMessageId
+        }),
+        signal: ac.signal
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Network request failed";
+      window.clearTimeout(timeout);
+      throw new Error(`Network error: ${message}. API_BASE=${API_BASE}`);
+    }
 
     if (!res.ok) {
       let payload: unknown = undefined;
+      let textBody = "";
       try {
         payload = await res.json();
       } catch {
-        // ignore non-json error body
+        try {
+          textBody = await res.text();
+        } catch {
+          // ignore non-json error body
+        }
       }
-      throw new Error(toErrorMessage(`Stream request failed (${res.status})`, payload));
+      const message = toErrorMessage(`Stream request failed (${res.status})`, payload);
+      window.clearTimeout(timeout);
+      throw new Error(textBody ? `${message}: ${textBody}` : message);
     }
 
     if (!res.body) {
+      window.clearTimeout(timeout);
       throw new Error("SSE stream body is empty");
     }
 
-    await parseSSE(res.body, handlers);
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("text/event-stream")) {
+      window.clearTimeout(timeout);
+      throw new Error(`Unexpected stream content-type: ${contentType || "unknown"}`);
+    }
+
+    const { doneReceived } = await consumeSSE(res.body, handlers);
+    window.clearTimeout(timeout);
+    if (!doneReceived) throw new Error("Stream ended without done event");
   },
 
   submitAssessment: (answers: number[]): Promise<AssessmentResult> =>

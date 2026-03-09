@@ -1,3 +1,5 @@
+import { deepSeekChat, hasDeepSeekConfig } from "./providers/deepseekClient";
+
 export interface ChatHistoryItem {
   role: "user" | "assistant";
   content: string;
@@ -22,4 +24,33 @@ export const generateMockAssistantReply = (history: ChatHistoryItem[]): string =
     `\u5efa\u8bae\u4e09\uff1a${suggest3}`,
     "\u5982\u679c\u4f60\u613f\u610f\uff0c\u6211\u53ef\u4ee5\u7ee7\u7eed\u5e2e\u4f60\u628a\u4e0b\u4e00\u6b65\u62c6\u5f97\u66f4\u5177\u4f53\u3002"
   ].join("\n");
+};
+
+export const generateAssistantReply = async (history: ChatHistoryItem[]): Promise<string> => {
+  if (!hasDeepSeekConfig()) {
+    return generateMockAssistantReply(history);
+  }
+
+  try {
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+      {
+        role: "system",
+        content:
+          "你是心镜项目中的支持型助手。请用简洁、温和、可执行的方式回答，输出 2-4 句话，优先给下一步动作。"
+      }
+    ];
+
+    for (const item of history) {
+      messages.push({
+        role: item.role,
+        content: item.content
+      });
+    }
+
+    const reply = await deepSeekChat(messages);
+    if (reply.trim()) return reply.trim();
+    return generateMockAssistantReply(history);
+  } catch {
+    return generateMockAssistantReply(history);
+  }
 };

@@ -49,6 +49,13 @@ const buildContradictions = (input: AnalyzeInput): string[] => {
   return contradictions;
 };
 
+const confidenceByLevel = (level: AnalyzeInput["level"]): number => {
+  if (level === "healthy") return 0.78;
+  if (level === "mild") return 0.72;
+  if (level === "moderate") return 0.66;
+  return 0.61;
+};
+
 export class MockEmotionAnalyzer implements EmotionAnalyzer {
   async analyze(input: AnalyzeInput): Promise<AnalyzeOutput> {
     const stateType = pickStateType(input);
@@ -66,7 +73,8 @@ export class MockEmotionAnalyzer implements EmotionAnalyzer {
       emotionTags,
       contradictions,
       stateType,
-      summary: `你当前${stateText}状态，情绪与能量信号存在短时失衡，建议先降负荷再做小步调节。`
+      summary: `你当前${stateText}状态，情绪与能量信号存在短时失衡，建议先降负荷再做小步调节。`,
+      stateConfidence: confidenceByLevel(input.level)
     };
   }
 }
@@ -109,7 +117,9 @@ export class MockPlanGenerator implements PlanGenerator {
         tcmAdvice,
         westernAdvice: westernAdvice.slice(0, 1),
         microTasks,
-        riskNotice
+        riskNotice,
+        tcmConfidence: 0.72,
+        westernConfidence: 0.69
       };
     }
 
@@ -118,7 +128,9 @@ export class MockPlanGenerator implements PlanGenerator {
         tcmAdvice: tcmAdvice.slice(0, 1),
         westernAdvice,
         microTasks,
-        riskNotice
+        riskNotice,
+        tcmConfidence: 0.62,
+        westernConfidence: 0.66
       };
     }
 
@@ -126,7 +138,9 @@ export class MockPlanGenerator implements PlanGenerator {
       tcmAdvice,
       westernAdvice,
       microTasks,
-      riskNotice
+      riskNotice,
+      tcmConfidence: 0.7,
+      westernConfidence: 0.7
     };
   }
 }

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { AnalysisResult, api, StateType, UserLevel } from "../lib/api";
+import { api, ChatMessage } from "../lib/api";
 import { clearAuthToken } from "../lib/auth";
 import { emitPulse } from "../lib/pulseBus";
 import { voiceInput, VoiceStatus } from "../input/voiceInput";
@@ -9,36 +9,53 @@ type ChatMode = "text" | "voice";
 interface ChatDockProps {
   onLogout: () => void;
   chatEnabled: boolean;
-  analysisResult: AnalysisResult | null;
   onRequestReassess: () => void;
-  levelLabel: (level: UserLevel) => string;
-  stateTypeLabel: (stateType: StateType) => string;
+  assessmentLabel: string;
+  onAdviceRefresh?: (payload: { userText: string }) => void;
 }
 
-export function ChatDock({
-  onLogout,
-  chatEnabled,
-  analysisResult,
-  onRequestReassess,
-  levelLabel,
-  stateTypeLabel
-}: ChatDockProps): JSX.Element {
+const makeId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const findRecoveredAssistant = (
+  history: ChatMessage[],
+  userText: string,
+  startAt: number
+): ChatMessage | null => {
+  // Prefer the assistant message that follows a just-sent matching user message.
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    if (msg.role !== "assistant") continue;
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = history[j];
+      if (prev.role !== "user") continue;
+      if (prev.content === userText && prev.created_at >= startAt - 10_000) {
+        return msg;
+      }
+      break;
+    }
+  }
+  return null;
+};
+
+export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentLabel, onAdviceRefresh }: ChatDockProps): JSX.Element {
   const [mode, setMode] = useState<ChatMode>("text");
   const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
-  const [streamingReply, setStreamingReply] = useState("");
-  const [assistantReplies, setAssistantReplies] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const messagesRef = useRef<HTMLDivElement | null>(null);
   const vizCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const binsRef = useRef<Uint8Array<ArrayBuffer>>(new Uint8Array(64) as Uint8Array<ArrayBuffer>);
   const levelRef = useRef(0);
   const vizRafRef = useRef<number | null>(null);
   const currentSpeechTimerRef = useRef<number | null>(null);
   const assistantTextRef = useRef("");
+  const sendingRef = useRef(false);
+  const recentSubmitRef = useRef<{ text: string; at: number } | null>(null);
 
   const voiceOutputLabel = useMemo(
     () => (voiceEnabled ? "\u8bed\u97f3\u64ad\u62a5\uff1a\u5f00\u542f" : "\u8bed\u97f3\u64ad\u62a5\uff1a\u5173\u95ed"),
@@ -52,11 +69,22 @@ export function ChatDock({
     return "\u8bed\u97f3\u8f93\u5165\u672a\u5f00\u542f";
   }, [voiceStatus]);
 
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
   const ensureSession = async (): Promise<string> => {
     if (sessionId) return sessionId;
     const created = await api.createSession();
     setSessionId(created.sessionId);
     return created.sessionId;
+  };
+
+  const reloadMessages = async (sid: string): Promise<void> => {
+    const history = await api.getMessages(sid);
+    setMessages(history);
   };
 
   useEffect(() => {
@@ -65,6 +93,7 @@ export function ChatDock({
         setError(null);
         const created = await api.createSession();
         setSessionId(created.sessionId);
+        await reloadMessages(created.sessionId);
       } catch (err) {
         setError((err as Error).message);
       }
@@ -92,7 +121,6 @@ export function ChatDock({
       if (!chatEnabled) return;
       void sendMessage(text);
     });
-
     return () => {
       offVoiceStatus();
       offMeter();
@@ -124,7 +152,7 @@ export function ChatDock({
         canvas.height = h;
       }
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
+      ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
       ctx.fillRect(0, 0, w, h);
 
       const bins = binsRef.current;
@@ -132,14 +160,13 @@ export function ChatDock({
       const gap = 2;
       const barW = Math.max(2, (w - gap * (count - 1)) / count);
       const levelBoost = 0.35 + levelRef.current * 0.95;
-
       for (let i = 0; i < count; i++) {
         const v = bins[i] / 255;
         const barH = Math.max(2, h * v * levelBoost);
         const x = i * (barW + gap);
         const y = h - barH;
         const alpha = 0.2 + v * 0.7;
-        ctx.fillStyle = `rgba(115, 224, 173, ${alpha})`;
+        ctx.fillStyle = `rgba(49, 93, 138, ${alpha})`;
         ctx.fillRect(x, y, barW, barH);
       }
       vizRafRef.current = requestAnimationFrame(draw);
@@ -160,66 +187,113 @@ export function ChatDock({
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1;
     utterance.pitch = 1;
-
     utterance.onstart = () => {
       emitPulse(0.4);
       currentSpeechTimerRef.current = window.setInterval(() => emitPulse(0.15 + Math.random() * 0.2), 80);
     };
     utterance.onboundary = () => emitPulse(0.25);
-
     const finish = (): void => {
       if (currentSpeechTimerRef.current !== null) {
         window.clearInterval(currentSpeechTimerRef.current);
         currentSpeechTimerRef.current = null;
       }
     };
-
     utterance.onend = finish;
     utterance.onerror = finish;
     window.speechSynthesis.speak(utterance);
   };
 
   const sendMessage = async (rawText: string): Promise<void> => {
-    if (!chatEnabled || loading) return;
+    if (!chatEnabled || loading || sendingRef.current) return;
     const text = rawText.trim();
     if (!text) return;
 
+    const last = recentSubmitRef.current;
+    if (last && last.text === text && Date.now() - last.at < 1800) {
+      return;
+    }
+    recentSubmitRef.current = { text, at: Date.now() };
+
+    sendingRef.current = true;
     setError(null);
-    setInput("");
-    setLoading(true);
-    setStreamingReply("");
-    assistantTextRef.current = "";
 
     try {
       const sid = await ensureSession();
       stopSpeech();
-      let doneReceived = false;
 
-      await api.streamMessage(sid, text, { voice: voiceEnabled }, {
-        onToken: (tokenText) => {
-          assistantTextRef.current += tokenText;
-          setStreamingReply(assistantTextRef.current);
-          emitPulse(0.16 + Math.random() * 0.12);
-        },
-        onPulse: (v) => emitPulse(v),
-        onDone: () => {
-          doneReceived = true;
-        }
-      });
+      const userMessage: ChatMessage = { id: makeId("u"), role: "user", content: text, created_at: Date.now() };
+      const pendingAssistantId = makeId("a");
+      const assistantPending: ChatMessage = { id: pendingAssistantId, role: "assistant", content: "", created_at: Date.now() };
 
-      if (doneReceived && assistantTextRef.current.trim()) {
-        const reply = assistantTextRef.current;
-        setAssistantReplies((prev) => [reply, ...prev].slice(0, 3));
-        setStreamingReply("");
-        if (voiceEnabled) {
-          speakWithPulse(reply);
+      setMessages((prev) => [...prev, userMessage, assistantPending]);
+      setInput("");
+      setLoading(true);
+      assistantTextRef.current = "";
+      const requestStartedAt = Date.now();
+      const clientMessageId = makeId("cmid");
+
+      let doneMessageId = "";
+      let tokenReceived = false;
+      try {
+        await api.streamMessage(sid, text, { voice: voiceEnabled, clientMessageId }, {
+          onToken: (tokenText) => {
+            tokenReceived = true;
+            assistantTextRef.current += tokenText;
+            emitPulse(0.16 + Math.random() * 0.12);
+            setMessages((prev) =>
+              prev.map((msg) => (msg.id === pendingAssistantId ? { ...msg, content: assistantTextRef.current } : msg))
+            );
+          },
+          onPulse: (v) => emitPulse(v),
+          onDone: (messageId) => {
+            doneMessageId = messageId;
+          }
+        });
+      } catch (streamErr) {
+        // Fallback only when stream fails before any token arrives.
+        // First try to recover the just-written server reply to avoid duplicate send.
+        if (!tokenReceived) {
+          const history = await api.getMessages(sid);
+          const recovered = findRecoveredAssistant(history, text, requestStartedAt);
+          if (recovered) {
+            assistantTextRef.current = recovered.content;
+            doneMessageId = recovered.id;
+          } else {
+            const fallback = await api.sendMessageOnce(sid, text, { voice: voiceEnabled, clientMessageId });
+            assistantTextRef.current = fallback.assistantMessage.content;
+            doneMessageId = fallback.assistantMessage.id;
+          }
+        } else {
+          throw streamErr;
         }
       }
+
+      if (doneMessageId) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === pendingAssistantId ? { ...msg, id: doneMessageId, content: assistantTextRef.current } : msg
+          )
+        );
+      }
+      if (assistantTextRef.current && voiceEnabled) {
+        speakWithPulse(assistantTextRef.current);
+      }
+      await reloadMessages(sid);
+      if (assistantTextRef.current) {
+        onAdviceRefresh?.({ userText: text });
+      }
     } catch (err) {
-      setError((err as Error).message);
+      setError((err as Error).message || "发送失败");
     } finally {
       setLoading(false);
+      sendingRef.current = false;
     }
+  };
+
+  const clearHistory = async (): Promise<void> => {
+    if (!sessionId) return;
+    await api.clearMessages(sessionId);
+    setMessages([]);
   };
 
   const onSubmit = async (e: FormEvent): Promise<void> => {
@@ -249,31 +323,38 @@ export function ChatDock({
     onLogout();
   };
 
-  const onReassess = (): void => {
-    setAssistantReplies([]);
-    setStreamingReply("");
-    onRequestReassess();
-  };
-
   const chatInputDisabled = loading || !sessionId || !chatEnabled;
+  const onReassess = async (): Promise<void> => {
+    if (loading || !sessionId) return;
+    setError(null);
+    setLoading(true);
+    try {
+      stopSpeech();
+      voiceInput.stop();
+      await clearHistory();
+      onRequestReassess();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="chat-dock">
       <div className="chat-header">
-        <span>{"\u804a\u5929"}</span>
+        <span>{"聊天"}</span>
         <div className="chat-actions">
-          <button type="button" onClick={onReassess} disabled={loading || !sessionId}>
-            {"\u91cd\u65b0\u8bc4\u4f30"}
+          <button type="button" onClick={() => void onReassess()} disabled={loading || !sessionId}>
+            {"重新评估"}
           </button>
-          <button type="button" onClick={logout}>{"\u9000\u51fa\u767b\u5f55"}</button>
+          <button type="button" onClick={logout}>{"退出登录"}</button>
         </div>
       </div>
 
       <div className="session-row">
         <span className="session-single">
-          {chatEnabled
-            ? "\u7ed3\u679c\u5df2\u540c\u6b65\u5230\u4e0a\u65b9\u4e3b\u821e\u53f0\uff0c\u8bf7\u5728\u4e0b\u65b9\u8865\u5145\u60c5\u51b5\u3002"
-            : "\u8bf7\u5148\u5728\u4e3b\u821e\u53f0\u5b8c\u6210\u8bc4\u4f30\u4e0e\u5206\u6790\u3002"}
+          {assessmentLabel ? `评估结果：${assessmentLabel}` : "评估已完成，你可以继续补充情况。"}
         </span>
         <label className="voice-toggle">
           <input type="checkbox" checked={voiceEnabled} onChange={(e) => setVoiceEnabled(e.target.checked)} />
@@ -281,42 +362,29 @@ export function ChatDock({
         </label>
       </div>
 
-      {analysisResult && (
-        <div className="chat-guidance">
-          <div className="chat-guidance-title">
-            {`状态提示：${stateTypeLabel(analysisResult.stateType)} | ${levelLabel(analysisResult.level)}`}
+      <div className="chat-messages" ref={messagesRef}>
+        {messages.length === 0 && (
+          <div className="chat-empty">
+            {"发送一条补充信息，我会结合当前状态继续陪你梳理。"}
           </div>
-          <div className="chat-guidance-summary">{analysisResult.summary}</div>
-          <div className="task-list">
-            {analysisResult.microTasks.map((item) => (
-              <span key={item}>{item}</span>
-            ))}
+        )}
+        {messages.map((msg) => (
+          <div key={msg.id} className={`chat-bubble ${msg.role === "user" ? "user" : "system"}`}>
+            {msg.content}
           </div>
-          {streamingReply && <div className="chat-guidance-ai">{`AI 回复中：${streamingReply}`}</div>}
-          {assistantReplies.map((reply, idx) => (
-            <div key={`${idx}-${reply.slice(0, 12)}`} className="chat-guidance-ai">
-              {`AI 补充：${reply}`}
-            </div>
-          ))}
-          {analysisResult.riskNotice && <div className="risk-notice">{analysisResult.riskNotice}</div>}
-        </div>
-      )}
+        ))}
+      </div>
 
       {error && <div className="message-box">{error}</div>}
 
       {mode === "text" ? (
         <form onSubmit={onSubmit} className="chat-form">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={chatEnabled ? "\u8f93\u5165\u4f60\u73b0\u5728\u7684\u8865\u5145\u4fe1\u606f..." : "\u8bf7\u5148\u5b8c\u6210\u4e0a\u65b9\u5206\u6790"}
-            disabled={chatInputDisabled}
-          />
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={"输入你现在的补充信息..."} disabled={chatInputDisabled} />
           <button type="submit" disabled={chatInputDisabled}>
-            {loading ? "\u751f\u6210\u4e2d..." : "\u53d1\u9001"}
+            {loading ? "生成中..." : "发送"}
           </button>
           <button type="button" onClick={() => setMode("voice")} disabled={!chatEnabled}>
-            {"\u8bed\u97f3\u8f93\u5165"}
+            {"语音输入"}
           </button>
         </form>
       ) : (
@@ -324,11 +392,9 @@ export function ChatDock({
           <canvas className="voice-visualizer" ref={vizCanvasRef} />
           <div className="voice-row">
             <button type="button" onClick={toggleVoiceInput} disabled={voiceStatus === "disabled" || loading || !chatEnabled}>
-              {voiceStatus === "recording" || voiceStatus === "connecting"
-                ? "\u7ed3\u675f\u8bed\u97f3\u8f93\u5165"
-                : "\u5f00\u59cb\u8bed\u97f3\u8f93\u5165"}
+              {voiceStatus === "recording" || voiceStatus === "connecting" ? "结束语音输入" : "开始语音输入"}
             </button>
-            <button type="button" onClick={switchToTextMode}>{"\u8fd4\u56de\u6587\u5b57\u8f93\u5165"}</button>
+            <button type="button" onClick={switchToTextMode}>{"返回文字输入"}</button>
             <span>{voiceInputLabel}</span>
           </div>
         </div>

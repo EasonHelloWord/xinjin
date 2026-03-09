@@ -9,16 +9,54 @@ interface HomePageProps {
   onLogout: () => void;
 }
 
-type WorkflowStage = "assessment" | "state_input" | "result";
+type WorkflowStage = "assessment" | "result";
 
-const ASSESSMENT_QUESTIONS = [
-  "最近一周，你是否经常感到精力不足？",
-  "最近一周，你是否很难专注在学习或任务上？",
-  "最近一周，你是否出现明显焦虑或烦躁？",
-  "最近一周，你是否回避社交或沟通？",
-  "最近一周，你的睡眠质量是否稳定？（反向）",
-  "最近一周，你是否能较快从负面情绪恢复？（反向）"
+type AssessmentQuestion = {
+  id: number;
+  text: string;
+};
+
+const ASSESSMENT_QUESTIONS: AssessmentQuestion[] = [
+  { id: 1, text: "我感到焦虑、紧张或烦躁不安。" },
+  { id: 2, text: "我能在一天中体验到愉悦和满足的时刻。" },
+  { id: 3, text: "一些小事就能轻易地激怒我或让我感到沮丧。" },
+  { id: 4, text: "我觉得内心平静而安稳。" },
+  { id: 5, text: "我会突然感到一阵悲伤，甚至想哭。" },
+  { id: 6, text: "我对自己是满意的，接纳自己现在的样子。" },
+  { id: 7, text: "我觉得自己很失败，不如别人。" },
+  { id: 8, text: "当我需要帮助时，有人可以依靠。" },
+  { id: 9, text: "我经常感到孤独，觉得被他人疏远。" },
+  { id: 10, text: "我相信自己能处理好生活中的大多数难题。" },
+  { id: 11, text: "我感到精力充沛，做事有干劲。" },
+  { id: 12, text: "我睡眠质量很差，或者睡醒后依然觉得很累。" },
+  { id: 13, text: "我食欲正常，享受进食的过程。" },
+  { id: 14, text: "我常常感到身体疲惫，做什么都提不起劲。" },
+  { id: 15, text: "我能专注于我正在做的事情（如工作、学习、娱乐）。" },
+  { id: 16, text: "我觉得生活很有意义，对未来有期待。" },
+  { id: 17, text: "我感到迷茫，不知道前进的方向在哪里。" },
+  { id: 18, text: "即使遇到困难，我也倾向于坚持下去。" },
+  { id: 19, text: "我觉得生活很乏味，没什么意思。" },
+  { id: 20, text: "总的来说，我对未来的生活持乐观态度。" }
 ];
+
+const OPTION_LABELS = [
+  { value: 1, label: "A", text: "完全不符合" },
+  { value: 2, label: "B", text: "比较不符合" },
+  { value: 3, label: "C", text: "不确定 / 有时符合" },
+  { value: 4, label: "D", text: "比较符合" },
+  { value: 5, label: "E", text: "完全符合" }
+] as const;
+
+const REVERSED_QUESTION_IDS = new Set([1, 3, 5, 7, 9, 12, 14, 17, 19]);
+
+const shuffleQuestions = (questions: AssessmentQuestion[]): AssessmentQuestion[] => {
+  const next = [...questions];
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+};
 
 const levelLabel = (level: UserLevel): string => {
   if (level === "healthy") return "健康";
@@ -36,20 +74,19 @@ const stateTypeLabel = (stateType: StateType): string => {
 export function HomePage({ onLogout }: HomePageProps): JSX.Element {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const controller = useMemo(() => new CloudController(), []);
+  const [initLoading, setInitLoading] = useState(true);
   const [stage, setStage] = useState<WorkflowStage>("assessment");
   const [assessmentAnswers, setAssessmentAnswers] = useState<number[]>(() => ASSESSMENT_QUESTIONS.map(() => 3));
+  const [displayQuestions, setDisplayQuestions] = useState<AssessmentQuestion[]>(() => shuffleQuestions(ASSESSMENT_QUESTIONS));
   const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [stateText, setStateText] = useState("");
-  const [sleepHours, setSleepHours] = useState("7");
-  const [fatigueLevel, setFatigueLevel] = useState<number>(3);
-  const [socialWillingness, setSocialWillingness] = useState<number>(3);
   const [assessmentLoading, setAssessmentLoading] = useState(false);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [adviceUpdating, setAdviceUpdating] = useState(false);
   const [flowError, setFlowError] = useState<string | null>(null);
   const pulseEnergyRef = useRef(0);
   const pulseRafRef = useRef<number | null>(null);
-
+  const adviceReqSeqRef = useRef(0);
+  const recentUserTextsRef = useRef<string[]>([]);
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -58,6 +95,31 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
     engine.init();
     return () => engine.dispose();
   }, [controller]);
+
+  useEffect(() => {
+    const restoreLatest = async (): Promise<void> => {
+      try {
+        const summary = await api.getProfileSummary();
+        if (summary.latestAssessment) {
+          const { id, score, level, sectionScores, createdAt } = summary.latestAssessment;
+          setAssessmentResult({ id, score, level, sectionScores, createdAt });
+        }
+        if (summary.latestAnalysis) {
+          setAnalysisResult(summary.latestAnalysis);
+          setStage("result");
+        } else {
+          setStage("assessment");
+          setDisplayQuestions(shuffleQuestions(ASSESSMENT_QUESTIONS));
+        }
+      } catch {
+        setStage("assessment");
+        setDisplayQuestions(shuffleQuestions(ASSESSMENT_QUESTIONS));
+      } finally {
+        setInitLoading(false);
+      }
+    };
+    void restoreLatest();
+  }, []);
 
   useEffect(() => {
     controller.setStageCenterYOffset(-0.08);
@@ -93,10 +155,28 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
     setFlowError(null);
     setAssessmentLoading(true);
     try {
-      const result = await api.submitAssessment(assessmentAnswers);
+      const normalizedAnswers = assessmentAnswers
+        .slice(0, ASSESSMENT_QUESTIONS.length)
+        .map((value) => {
+          const n = Number(value);
+          if (!Number.isFinite(n)) return 3;
+          return Math.max(1, Math.min(5, Math.round(n)));
+        });
+
+      if (normalizedAnswers.length !== 20) {
+        throw new Error("问卷题目不足，无法提交评估");
+      }
+
+      const result = await api.submitAssessment(normalizedAnswers);
       setAssessmentResult(result);
-      setStage("state_input");
-      emitPulse(0.35);
+
+      const analysis = await api.analyzeState({
+        assessmentId: result.id,
+        text: "用户已完成20题心理状态问卷，请结合总分与分部分得分，给出首轮状态提示、中医调理建议、西医/心理建议与微任务。"
+      });
+      setAnalysisResult(analysis);
+      setStage("result");
+      emitPulse(0.55);
     } catch (err) {
       setFlowError((err as Error).message);
     } finally {
@@ -104,48 +184,52 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
     }
   };
 
-  const submitStateAnalyze = async (): Promise<void> => {
-    if (analysisLoading) return;
-    const text = stateText.trim();
-    if (!text) return;
-
-    setFlowError(null);
-    setAnalysisLoading(true);
-    try {
-      const result = await api.analyzeState({
-        assessmentId: assessmentResult?.id,
-        text,
-        sleepHours: Number.isFinite(Number(sleepHours)) ? Number(sleepHours) : undefined,
-        fatigueLevel,
-        socialWillingness
-      });
-      setAnalysisResult(result);
-      setStage("result");
-      emitPulse(0.55);
-    } catch (err) {
-      setFlowError((err as Error).message);
-    } finally {
-      setAnalysisLoading(false);
-    }
-  };
-
   const restartFlow = (): void => {
     setStage("assessment");
     setAssessmentResult(null);
     setAnalysisResult(null);
-    setStateText("");
+    setAdviceUpdating(false);
     setAssessmentAnswers(ASSESSMENT_QUESTIONS.map(() => 3));
+    setDisplayQuestions(shuffleQuestions(ASSESSMENT_QUESTIONS));
+    recentUserTextsRef.current = [];
     emitPulse(0.2);
+  };
+
+  const refreshAdviceFromChat = async (payload: { userText: string }): Promise<void> => {
+    if (!assessmentResult?.id) return;
+    const trimmed = payload.userText.trim();
+    if (!trimmed) return;
+    recentUserTextsRef.current = [...recentUserTextsRef.current, trimmed].slice(-6);
+
+    const seq = ++adviceReqSeqRef.current;
+    setAdviceUpdating(true);
+    try {
+      const recentText = recentUserTextsRef.current.map((line, idx) => `${idx + 1}. ${line}`).join("\n");
+      const analysis = await api.analyzeState({
+        assessmentId: assessmentResult.id,
+        text: `以下是用户最近多轮原始输入（按时间从早到晚）：\n${recentText}\n请优先评估情绪波动幅度、风险信号与稳定性，再更新状态提示和建议。`
+      });
+      if (seq === adviceReqSeqRef.current) {
+        setAnalysisResult(analysis);
+      }
+    } catch {
+      // Keep the existing panel content on refresh failure.
+    } finally {
+      if (seq === adviceReqSeqRef.current) {
+        setAdviceUpdating(false);
+      }
+    }
   };
 
   return (
     <div className="home-layout">
-      <div className={`cloud-stage ${stage === "assessment" || stage === "state_input" ? "hidden" : ""}`} ref={canvasRef} />
+      <div className={`cloud-stage ${stage === "assessment" || initLoading ? "hidden" : ""}`} ref={canvasRef} />
 
       {stage === "result" && analysisResult && (
         <>
           <aside className="mind-side mind-side-left">
             <h3>{"中医调理"}</h3>
+            <div className="advice-item">{`调试：可信度 ${Math.round((analysisResult.confidence?.tcm ?? 0.68) * 100)}%`}</div>
             {analysisResult.tcmAdvice.map((item) => (
               <div key={item} className="advice-item">
                 {item}
@@ -154,100 +238,90 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
           </aside>
           <aside className="mind-side mind-side-right">
             <h3>{"西医/心理建议"}</h3>
+            <div className="advice-item">{`状态提示：${stateTypeLabel(analysisResult.stateType)} | ${levelLabel(analysisResult.level)}`}</div>
+            <div className="advice-item">{`调试：状态可信度 ${Math.round((analysisResult.confidence?.state ?? 0.65) * 100)}% | 西医/心理建议可信度 ${Math.round((analysisResult.confidence?.western ?? 0.68) * 100)}%`}</div>
+            {adviceUpdating && <div className="advice-item">{"根据最新聊天更新建议中..."}</div>}
             {analysisResult.westernAdvice.map((item) => (
               <div key={item} className="advice-item">
                 {item}
               </div>
             ))}
+            <div className="task-list">
+              {analysisResult.microTasks.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+            {analysisResult.riskNotice && <div className="risk-notice">{analysisResult.riskNotice}</div>}
           </aside>
         </>
       )}
 
-      <div className="mind-stage-overlay">
-        {stage === "assessment" && (
-          <div className="mind-stage-card">
-            <h2>{"第一步：注册评估"}</h2>
-            <p>{"请先完成一轮简短评估，我们会先判断当前波动层级。"}</p>
+      {initLoading && (
+        <div className="assessment-screen">
+          <div className="assessment-inner assessment-loading">
+            <h1>{"加载中"}</h1>
+            <p>{"正在恢复你上次的评估与建议..."}</p>
+          </div>
+        </div>
+      )}
+
+      {!initLoading && stage === "assessment" && (
+        <div className="assessment-screen">
+          <div className="assessment-inner">
+            <h1>{"注册评估"}</h1>
+            <p>{"以下20个句子是关于您过去一周内日常生活与内心感受的描述。请根据您的实际体验，选择最符合您情况的选项。答案无对错之分，请凭直觉快速作答。"}</p>
             <div className="survey-list">
-              {ASSESSMENT_QUESTIONS.map((question, idx) => (
-                <label key={question} className="survey-item">
-                  <span>{question}</span>
-                  <input
-                    type="range"
-                    min={1}
-                    max={5}
-                    step={1}
-                    value={assessmentAnswers[idx]}
-                    onChange={(e) =>
-                      setAssessmentAnswers((prev) => prev.map((value, i) => (i === idx ? Number(e.target.value) : value)))
-                    }
-                  />
-                  <b>{assessmentAnswers[idx]}</b>
-                </label>
-              ))}
+              {displayQuestions.map((question) => {
+                const idx = question.id - 1;
+                const isReversed = REVERSED_QUESTION_IDS.has(question.id);
+                return (
+                  <div key={question.id} className="survey-item">
+                    <span>{question.text}</span>
+                    <div className="survey-options">
+                      {OPTION_LABELS.map((opt) => (
+                        <label key={`${question.id}-${opt.value}`} className="survey-option">
+                          <input
+                            type="radio"
+                            name={`q-${question.id}`}
+                            value={opt.value}
+                            checked={assessmentAnswers[idx] === opt.value}
+                            onChange={() =>
+                              setAssessmentAnswers((prev) =>
+                                prev.map((value, i) => (i === idx ? opt.value : value))
+                              )
+                            }
+                          />
+                          <span>{`${opt.label}. ${opt.text}（${isReversed ? 6 - opt.value : opt.value}分）`}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <button type="button" onClick={submitAssessment} disabled={assessmentLoading}>
               {assessmentLoading ? "评估中..." : "提交评估"}
             </button>
+            {flowError && <div className="message-box">{flowError}</div>}
           </div>
-        )}
-
-        {stage === "state_input" && (
-          <div className="mind-stage-card">
-            <h2>{"第二步：输入当前状态"}</h2>
-            <p>
-              {assessmentResult
-                ? `当前评估：${levelLabel(assessmentResult.level)} (${assessmentResult.score}分)`
-                : "请描述你现在的感受，系统会给出三态分类与双轨建议。"}
-            </p>
-            <textarea
-              value={stateText}
-              onChange={(e) => setStateText(e.target.value)}
-              placeholder={"例如：今天睡够了，但脑子还是很乱，不想说话"}
-            />
-            <div className="state-grid">
-              <label>
-                {"睡眠时长"}
-                <input type="number" value={sleepHours} onChange={(e) => setSleepHours(e.target.value)} min={0} max={24} />
-              </label>
-              <label>
-                {"疲劳感(1-5)"}
-                <input
-                  type="number"
-                  value={fatigueLevel}
-                  min={1}
-                  max={5}
-                  onChange={(e) => setFatigueLevel(Math.max(1, Math.min(5, Number(e.target.value) || 1)))}
-                />
-              </label>
-              <label>
-                {"社交意愿(1-5)"}
-                <input
-                  type="number"
-                  value={socialWillingness}
-                  min={1}
-                  max={5}
-                  onChange={(e) => setSocialWillingness(Math.max(1, Math.min(5, Number(e.target.value) || 1)))}
-                />
-              </label>
-            </div>
-            <button type="button" onClick={submitStateAnalyze} disabled={analysisLoading}>
-              {analysisLoading ? "分析中..." : "生成调理方案"}
-            </button>
-          </div>
-        )}
-
-        {flowError && <div className="message-box">{flowError}</div>}
-      </div>
+        </div>
+      )}
 
       {stage === "result" && (
         <ChatDock
           onLogout={onLogout}
-          chatEnabled={stage === "result"}
-          analysisResult={analysisResult}
+          chatEnabled={true}
           onRequestReassess={restartFlow}
-          levelLabel={levelLabel}
-          stateTypeLabel={stateTypeLabel}
+          onAdviceRefresh={(payload) => void refreshAdviceFromChat(payload)}
+          assessmentLabel={
+            assessmentResult
+              ? `${levelLabel(assessmentResult.level)} (${assessmentResult.score}分)${
+                  assessmentResult.sectionScores
+                    ? `｜情绪${assessmentResult.sectionScores.emotion} 自我关系${assessmentResult.sectionScores.selfAndRelation} 身体活力${assessmentResult.sectionScores.bodyAndVitality} 意义希望${assessmentResult.sectionScores.meaningAndHope}`
+                    : ""
+                }`
+              : ""
+          }
         />
       )}
     </div>

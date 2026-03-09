@@ -24,6 +24,10 @@ npm run start
 ## Environment
 
 - `JWT_SECRET` (optional): JWT signing secret. Default is `dev-secret-change-me`.
+- `AI_PROVIDER` (optional): set to `deepseek` to force DeepSeek provider.
+- `DEEPSEEK_API_KEY` (optional): when present, LLM calls use DeepSeek (`https://api.deepseek.com`).
+- `DEEPSEEK_BASE_URL` (optional): defaults to `https://api.deepseek.com`.
+- `DEEPSEEK_MODEL` (optional): defaults to `deepseek-chat`.
 
 ## Storage
 
