@@ -34,15 +34,23 @@ const toErrorMessage = (fallback: string, payload: unknown): string => {
 const fetchWithFallback = async (path: string, init: RequestInit, bases = API_BASES): Promise<Response> => {
   const candidates = bases;
   let lastError: unknown = null;
+  let lastResponse: Response | null = null;
 
   for (const candidate of candidates) {
     try {
-      return await fetch(`${candidate}${path}`, init);
+      const res = await fetch(`${candidate}${path}`, init);
+      // Typical when front-end origin has no /api proxy configured.
+      if (res.status === 404) {
+        lastResponse = res;
+        continue;
+      }
+      return res;
     } catch (err) {
       lastError = err;
     }
   }
 
+  if (lastResponse) return lastResponse;
   throw lastError instanceof Error ? lastError : new Error("Network request failed");
 };
 
