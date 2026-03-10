@@ -1,6 +1,6 @@
 export const APP_CONFIG = {
-  wsUrl: "ws://127.0.0.1:8787",
-  voiceStreamUrl: "ws://127.0.0.1:8787/voice",
+  wsUrl: "ws://81.69.228.248:8787",
+  voiceStreamUrl: "ws://81.69.228.248:8787/voice",
   cloud: {
     autoDegradeFpsThreshold: 45,
     avgWindow: 30,

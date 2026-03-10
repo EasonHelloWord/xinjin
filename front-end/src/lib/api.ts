@@ -1,6 +1,6 @@
 import { getAuthToken } from "./auth";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8787";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://81.69.228.248:8787";
 
 type ApiErrorPayload = { error?: { code?: string; message?: string } };
 
