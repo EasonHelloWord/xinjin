@@ -1,6 +1,33 @@
+const resolveWsBase = (): { wsUrl: string; voiceStreamUrl: string } => {
+  const envWs = (import.meta.env.VITE_WS_URL as string | undefined)?.trim();
+  const envVoice = (import.meta.env.VITE_VOICE_WS_URL as string | undefined)?.trim();
+  if (envWs || envVoice) {
+    return {
+      wsUrl: envWs || "ws://81.69.228.248:8787",
+      voiceStreamUrl: envVoice || `${envWs || "ws://81.69.228.248:8787"}/voice`
+    };
+  }
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname || "81.69.228.248";
+    const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+    return {
+      wsUrl: `${scheme}://${host}:8787`,
+      voiceStreamUrl: `${scheme}://${host}:8787/voice`
+    };
+  }
+
+  return {
+    wsUrl: "ws://81.69.228.248:8787",
+    voiceStreamUrl: "ws://81.69.228.248:8787/voice"
+  };
+};
+
+const WS_BASE = resolveWsBase();
+
 export const APP_CONFIG = {
-  wsUrl: "ws://81.69.228.248:8787",
-  voiceStreamUrl: "ws://81.69.228.248:8787/voice",
+  wsUrl: WS_BASE.wsUrl,
+  voiceStreamUrl: WS_BASE.voiceStreamUrl,
   cloud: {
     autoDegradeFpsThreshold: 45,
     avgWindow: 30,

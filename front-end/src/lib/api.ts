@@ -1,6 +1,27 @@
 import { getAuthToken } from "./auth";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://81.69.228.248:8787";
+const trim = (value: string | undefined): string => (value || "").trim();
+
+const resolveApiBases = (): string[] => {
+  const set = new Set<string>();
+  const envBase = trim(import.meta.env.VITE_API_BASE);
+  if (envBase) set.add(envBase);
+
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "https" : "http";
+    const host = window.location.hostname;
+    if (window.location.origin) set.add(window.location.origin);
+    if (host) set.add(`${protocol}://${host}:8787`);
+  }
+
+  set.add("http://81.69.228.248:8787");
+  set.add("http://127.0.0.1:8787");
+  set.add("http://localhost:8787");
+  return Array.from(set);
+};
+
+const API_BASES = resolveApiBases();
+const API_BASE = API_BASES[0];
 
 type ApiErrorPayload = { error?: { code?: string; message?: string } };
 
@@ -10,19 +31,8 @@ const toErrorMessage = (fallback: string, payload: unknown): string => {
   return typed.error?.message || fallback;
 };
 
-const withHostFallback = (base: string): string[] => {
-  const set = new Set<string>([base]);
-  if (base.includes("localhost")) {
-    set.add(base.replace("localhost", "127.0.0.1"));
-  }
-  if (base.includes("127.0.0.1")) {
-    set.add(base.replace("127.0.0.1", "localhost"));
-  }
-  return Array.from(set);
-};
-
-const fetchWithFallback = async (path: string, init: RequestInit, base = API_BASE): Promise<Response> => {
-  const candidates = withHostFallback(base);
+const fetchWithFallback = async (path: string, init: RequestInit, bases = API_BASES): Promise<Response> => {
+  const candidates = bases;
   let lastError: unknown = null;
 
   for (const candidate of candidates) {
@@ -60,7 +70,7 @@ const request = async <T>(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Network request failed";
-    throw new Error(`Network error: ${message}. API_BASE=${API_BASE}`);
+    throw new Error(`Network error: ${message}. API_BASE=${API_BASE}. tried=${API_BASES.join(",")}`);
   }
 
   if (!res.ok) {
@@ -350,7 +360,7 @@ export const api = {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Network request failed";
       window.clearTimeout(timeout);
-      throw new Error(`Network error: ${message}. API_BASE=${API_BASE}`);
+      throw new Error(`Network error: ${message}. API_BASE=${API_BASE}. tried=${API_BASES.join(",")}`);
     }
 
     if (!res.ok) {
