@@ -4,19 +4,24 @@ const trim = (value: string | undefined): string => (value || "").trim();
 
 const resolveApiBases = (): string[] => {
   const set = new Set<string>();
-  const envBase = trim(import.meta.env.VITE_API_BASE);
-  if (envBase) set.add(envBase);
 
   if (typeof window !== "undefined") {
     const protocol = window.location.protocol === "https:" ? "https" : "http";
     const host = window.location.hostname;
-    if (window.location.origin) set.add(window.location.origin);
     if (host) set.add(`${protocol}://${host}:8787`);
   }
 
+  const envBase = trim(import.meta.env.VITE_API_BASE);
+  if (envBase) set.add(envBase);
+
+  set.add("http://xinjin.easonjan.top:8787");
   set.add("http://81.69.228.248:8787");
-  set.add("http://127.0.0.1:8787");
-  set.add("http://localhost:8787");
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const isLocalHost = host === "localhost" || host === "127.0.0.1";
+  if (isLocalHost) {
+    set.add("http://127.0.0.1:8787");
+    set.add("http://localhost:8787");
+  }
   return Array.from(set);
 };
 
