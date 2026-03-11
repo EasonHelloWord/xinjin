@@ -99,6 +99,38 @@ const DIMENSION_RIGHT = [
   { key: "environment", title: "环境调理", emoji: "🌿" }
 ] as const;
 
+const dailyTaskKey = (): string => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `xinjin.daily-microtasks.${y}-${m}-${d}`;
+};
+
+const applyDailyStableMicroTasks = (analysis: AnalysisResult): AnalysisResult => {
+  if (typeof window === "undefined") return analysis;
+  const key = dailyTaskKey();
+  const raw = window.localStorage.getItem(key);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        const tasks = parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+        if (tasks.length > 0) {
+          return { ...analysis, microTasks: tasks };
+        }
+      }
+    } catch {
+      // ignore invalid storage content
+    }
+  }
+
+  if (analysis.microTasks.length > 0) {
+    window.localStorage.setItem(key, JSON.stringify(analysis.microTasks));
+  }
+  return analysis;
+};
+
 export function HomePage({ onLogout }: HomePageProps): JSX.Element {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const controller = useMemo(() => new CloudController(), []);
@@ -135,7 +167,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
           setAssessmentResult({ id, score, level, sectionScores, createdAt });
         }
         if (summary.latestAnalysis) {
-          setAnalysisResult(summary.latestAnalysis);
+          setAnalysisResult(applyDailyStableMicroTasks(summary.latestAnalysis));
           setStage("result");
         } else {
           setStage("assessment");
@@ -205,7 +237,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
         assessmentId: result.id,
         text: "用户已完成20题心理状态问卷，请结合总分与分部分得分，给出首轮状态提示，并按身体、情绪、认知、行为、关系、环境六个维度分别给出1条可执行建议，同时给出今日微任务。"
       });
-      setAnalysisResult(analysis);
+      setAnalysisResult(applyDailyStableMicroTasks(analysis));
       setStage("result");
       emitPulse(0.55);
     } catch (err) {
@@ -241,7 +273,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
         text: `以下是用户最近多轮原始输入（按时间从早到晚）：\n${recentText}\n请优先评估情绪波动幅度、风险信号与稳定性，再更新状态提示和建议。`
       });
       if (seq === adviceReqSeqRef.current) {
-        setAnalysisResult(analysis);
+        setAnalysisResult(applyDailyStableMicroTasks(analysis));
       }
     } catch {
       // Keep the existing panel content on refresh failure.
