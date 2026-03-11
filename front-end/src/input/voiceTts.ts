@@ -6,6 +6,7 @@ type PendingSpeak = {
 };
 
 type DebugListener = (line: string) => void;
+type LevelListener = (level: number) => void;
 
 type VoiceEnvelope = {
   type?: string;
@@ -26,6 +27,10 @@ export class VoiceTts {
   private connectPromise: Promise<void> | null = null;
   private pending = new Map<string, PendingSpeak>();
   private debugListeners = new Set<DebugListener>();
+  private levelListeners = new Set<LevelListener>();
+  private scheduledPulseTimers: number[] = [];
+  private playSeq = 0;
+
   private audioContext: AudioContext | null = null;
   private nextPlayAt = 0;
   private sampleRate = 24000;
@@ -36,9 +41,54 @@ export class VoiceTts {
     this.debugListeners.forEach((listener) => listener(line));
   }
 
+  private emitLevel(level: number): void {
+    const v = Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : 0;
+    this.levelListeners.forEach((listener) => listener(v));
+  }
+
+  private clearScheduledPulses(): void {
+    for (const id of this.scheduledPulseTimers) {
+      window.clearTimeout(id);
+    }
+    this.scheduledPulseTimers = [];
+  }
+
+  private schedulePulses(audioBuffer: AudioBuffer, startAt: number): void {
+    const seq = this.playSeq;
+    const samples = audioBuffer.getChannelData(0);
+    const sr = audioBuffer.sampleRate || 24000;
+    const bucket = Math.max(256, Math.floor(sr / 26));
+    const now = this.ensureAudioContext().currentTime;
+
+    for (let i = 0; i < samples.length; i += bucket) {
+      const end = Math.min(samples.length, i + bucket);
+      let sum = 0;
+      for (let j = i; j < end; j++) {
+        const s = samples[j];
+        sum += s * s;
+      }
+      const rms = Math.sqrt(sum / Math.max(1, end - i));
+      const level = Math.min(1, Math.pow(rms * 3.2, 0.75));
+      if (level < 0.03) continue;
+
+      const t = startAt + i / sr;
+      const delay = Math.max(0, (t - now) * 1000);
+      const timer = window.setTimeout(() => {
+        if (seq !== this.playSeq) return;
+        this.emitLevel(level);
+      }, delay);
+      this.scheduledPulseTimers.push(timer);
+    }
+  }
+
   onDebug(listener: DebugListener): () => void {
     this.debugListeners.add(listener);
     return () => this.debugListeners.delete(listener);
+  }
+
+  onLevel(listener: LevelListener): () => void {
+    this.levelListeners.add(listener);
+    return () => this.levelListeners.delete(listener);
   }
 
   private async ensureSocket(): Promise<void> {
@@ -181,6 +231,7 @@ export class VoiceTts {
     source.buffer = decoded;
     source.connect(ctx.destination);
     const startAt = Math.max(ctx.currentTime, this.nextPlayAt);
+    this.schedulePulses(decoded, startAt);
     source.start(startAt);
     this.nextPlayAt = startAt + decoded.duration;
   }
@@ -205,6 +256,7 @@ export class VoiceTts {
     source.buffer = audioBuffer;
     source.connect(ctx.destination);
     const startAt = Math.max(ctx.currentTime, this.nextPlayAt);
+    this.schedulePulses(audioBuffer, startAt);
     source.start(startAt);
     this.nextPlayAt = startAt + audioBuffer.duration;
   }
@@ -217,6 +269,9 @@ export class VoiceTts {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new Error("TTS websocket is not connected");
     }
+
+    this.playSeq += 1;
+    this.clearScheduledPulses();
 
     const requestId = makeReqId();
     this.emitDebug(
@@ -249,6 +304,8 @@ export class VoiceTts {
   }
 
   stop(): void {
+    this.playSeq += 1;
+    this.clearScheduledPulses();
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(
@@ -262,6 +319,7 @@ export class VoiceTts {
       }
     }
     this.nextPlayAt = this.audioContext?.currentTime || 0;
+    this.emitLevel(0);
   }
 }
 

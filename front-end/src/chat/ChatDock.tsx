@@ -48,7 +48,6 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
   const [loading, setLoading] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
-  const [voiceDebug, setVoiceDebug] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -56,7 +55,6 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
   const binsRef = useRef<Uint8Array<ArrayBuffer>>(new Uint8Array(64) as Uint8Array<ArrayBuffer>);
   const levelRef = useRef(0);
   const vizRafRef = useRef<number | null>(null);
-  const currentSpeechTimerRef = useRef<number | null>(null);
   const assistantTextRef = useRef("");
   const sendingRef = useRef(false);
   const recentSubmitRef = useRef<{ text: string; at: number } | null>(null);
@@ -107,10 +105,6 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
 
   const stopSpeech = (): void => {
     voiceTts.stop();
-    if (currentSpeechTimerRef.current !== null) {
-      window.clearInterval(currentSpeechTimerRef.current);
-      currentSpeechTimerRef.current = null;
-    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -118,12 +112,7 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
 
   useEffect(() => {
     const offVoiceStatus = voiceInput.onStatus(setVoiceStatus);
-    const offVoiceDebug = voiceTts.onDebug((line) => {
-      setVoiceDebug((prev) => {
-        const next = [...prev, `${new Date().toLocaleTimeString()} ${line}`];
-        return next.slice(-6);
-      });
-    });
+    const offTtsLevel = voiceTts.onLevel((level) => emitPulse(level));
     const offMeter = voiceInput.onMeter((meter) => {
       binsRef.current = meter.bins;
       levelRef.current = meter.level;
@@ -134,7 +123,7 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
     });
     return () => {
       offVoiceStatus();
-      offVoiceDebug();
+      offTtsLevel();
       offMeter();
       offTranscript();
       stopSpeech();
@@ -196,8 +185,6 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
   const speakWithPulse = (text: string): void => {
     if (!voiceEnabled) return;
     stopSpeech();
-    emitPulse(0.4);
-    currentSpeechTimerRef.current = window.setInterval(() => emitPulse(0.15 + Math.random() * 0.2), 80);
     void voiceTts
       .speak(text)
       .catch((err) => {
@@ -210,12 +197,6 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
           return;
         }
         setError((err as Error).message || "云端语音播报失败（未启用浏览器回退）");
-      })
-      .finally(() => {
-        if (currentSpeechTimerRef.current !== null) {
-          window.clearInterval(currentSpeechTimerRef.current);
-          currentSpeechTimerRef.current = null;
-        }
       });
   };
 
@@ -406,17 +387,6 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
       </div>
 
       {error && <div className="message-box">{error}</div>}
-      <div className="voice-debug-box">
-        {voiceDebug.length > 0 ? (
-          voiceDebug.map((line, idx) => (
-            <div key={`${idx}-${line}`} className="voice-debug-line">
-              {line}
-            </div>
-          ))
-        ) : (
-          <div className="voice-debug-line">语音调试：等待事件...</div>
-        )}
-      </div>
 
       {mode === "text" ? (
         <form onSubmit={onSubmit} className="chat-form">
