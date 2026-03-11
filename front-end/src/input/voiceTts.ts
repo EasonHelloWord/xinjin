@@ -82,6 +82,13 @@ export class VoiceTts {
     return this.audioContext;
   }
 
+  async unlock(): Promise<void> {
+    const ctx = this.ensureAudioContext();
+    if (ctx.state !== "running") {
+      await ctx.resume();
+    }
+  }
+
   private handleTextFrame(text: string): void {
     let parsed: VoiceEnvelope | null = null;
     try {

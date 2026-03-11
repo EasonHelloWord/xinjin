@@ -350,6 +350,18 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
     }
   };
 
+  const onToggleVoiceOutput = (enabled: boolean): void => {
+    setVoiceEnabled(enabled);
+    if (!enabled) {
+      stopSpeech();
+      return;
+    }
+    void voiceTts.unlock().catch((err) => {
+      setVoiceEnabled(false);
+      setError((err as Error).message || "浏览器阻止了语音播放，请点击页面后重试");
+    });
+  };
+
   return (
     <div className="chat-dock">
       <div className="chat-header">
@@ -367,7 +379,7 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
           {assessmentLabel ? `评估结果：${assessmentLabel}` : "评估已完成，你可以继续补充情况。"}
         </span>
         <label className="voice-toggle">
-          <input type="checkbox" checked={voiceEnabled} onChange={(e) => setVoiceEnabled(e.target.checked)} />
+          <input type="checkbox" checked={voiceEnabled} onChange={(e) => onToggleVoiceOutput(e.target.checked)} />
           {voiceOutputLabel}
         </label>
       </div>

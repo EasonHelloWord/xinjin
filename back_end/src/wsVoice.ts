@@ -171,6 +171,7 @@ class OpenAiTtsSession {
 
 export const registerVoiceWs = async (fastify: FastifyInstance): Promise<void> => {
   fastify.get("/voice", { websocket: true }, (socket) => {
+    fastify.log.info("Voice websocket connected");
     send(socket, "voice_ready", {
       mode: hasOpenAiTtsConfig() ? "openai_tts+placeholder_asr" : "placeholder",
       provider: hasOpenAiTtsConfig() ? "openai" : "none",
@@ -203,6 +204,7 @@ export const registerVoiceWs = async (fastify: FastifyInstance): Promise<void> =
       if (!parsed || !parsed.action || !String(parsed.action).startsWith("tts_")) return;
 
       try {
+        fastify.log.info({ action: parsed.action, requestId: parsed.requestId || "" }, "Voice TTS command");
         await ttsSession.handle(parsed);
       } catch (err) {
         fastify.log.error({ err }, "Voice TTS command failed");
@@ -219,6 +221,10 @@ export const registerVoiceWs = async (fastify: FastifyInstance): Promise<void> =
         code: "INTERNAL",
         message: "Voice channel internal error"
       });
+    });
+
+    socket.on("close", () => {
+      fastify.log.info("Voice websocket closed");
     });
   });
 };
