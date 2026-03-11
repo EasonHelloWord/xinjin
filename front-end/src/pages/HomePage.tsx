@@ -298,7 +298,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
           </div>
 
           <aside className="mind-side mind-side-left">
-            <h3>{"六维调理（左）"}</h3>
+            <h3>{"六维调理"}</h3>
             {DIMENSION_LEFT.map((item) => (
               <article key={item.key} className="advice-block">
                 <div className="advice-title">{`${item.emoji} ${item.title}`}</div>
@@ -307,7 +307,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
             ))}
           </aside>
           <aside className="mind-side mind-side-right">
-            <h3>{"六维调理（右）"}</h3>
+            <h3>{"六维调理"}</h3>
             {DIMENSION_RIGHT.map((item) => (
               <article key={item.key} className="advice-block">
                 <div className="advice-title">{`${item.emoji} ${item.title}`}</div>
