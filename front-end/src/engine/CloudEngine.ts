@@ -1,5 +1,6 @@
 import { APP_CONFIG } from "../config";
 import { CloudController } from "./CloudController";
+import { onPulse } from "../lib/pulseBus";
 
 interface EngineCallbacks {
   onFps?: (fps: number) => void;
@@ -10,6 +11,11 @@ interface EngineCallbacks {
 interface Vec2 {
   x: number;
   y: number;
+}
+
+interface RippleWave {
+  startSec: number;
+  strength: number;
 }
 
 const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v));
@@ -41,6 +47,9 @@ export class CloudEngine {
   private breathPhase = 0;
   private fpsWindow: number[] = [];
   private degradeLevel = 0;
+  private pulseEnergy = 0;
+  private rippleWaves: RippleWave[] = [];
+  private offPulse: (() => void) | null = null;
 
   constructor(container: HTMLElement, controller: CloudController, callbacks: EngineCallbacks = {}) {
     this.container = container;
@@ -69,9 +78,20 @@ export class CloudEngine {
     this.container.appendChild(this.canvas);
     this.resizeCanvas();
     this.bindEvents();
-
     this.startedAt = performance.now();
     this.lastTs = this.startedAt;
+
+    this.offPulse = onPulse((v) => {
+      const strength = clamp(v, 0, 1);
+      this.pulseEnergy = Math.min(1, this.pulseEnergy + Math.max(0.03, strength * 0.9));
+      this.rippleWaves.push({
+        startSec: (performance.now() - this.startedAt) / 1000,
+        strength: Math.max(0.22, strength)
+      });
+      if (this.rippleWaves.length > 12) {
+        this.rippleWaves = this.rippleWaves.slice(-12);
+      }
+    });
     this.loop(this.startedAt);
   }
 
@@ -93,6 +113,7 @@ export class CloudEngine {
 
     this.updateInteraction(delta, snapshot);
     this.breathPhase += delta * 2 * Math.PI * (snapshot.visual.breathHz + snapshot.visual.breathJitter * 0.2);
+    this.pulseEnergy *= 0.9;
     this.drawFrame(elapsed, snapshot);
 
     this.applyFpsMetric(delta);
@@ -205,6 +226,10 @@ export class CloudEngine {
   dispose(): void {
     cancelAnimationFrame(this.frameId);
     this.unbindEvents();
+    if (this.offPulse) {
+      this.offPulse();
+      this.offPulse = null;
+    }
     if (this.canvas && this.container.contains(this.canvas)) {
       this.container.removeChild(this.canvas);
     }
@@ -324,6 +349,36 @@ export class CloudEngine {
       ctx.beginPath();
       ctx.arc(hx, hy, hr, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    this.drawRipples(ctx, cx, cy, radius, time, snapshot.visual.colorA);
+  }
+
+  private drawRipples(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    radius: number,
+    timeSec: number,
+    colorA: { r: number; g: number; b: number }
+  ): void {
+    const lifeSec = 1.15;
+    this.rippleWaves = this.rippleWaves.filter((wave) => timeSec - wave.startSec <= lifeSec);
+    if (!this.rippleWaves.length) return;
+
+    for (let i = 0; i < this.rippleWaves.length; i++) {
+      const wave = this.rippleWaves[i];
+      const age = clamp((timeSec - wave.startSec) / lifeSec, 0, 1);
+      const eased = age * age * (3 - 2 * age);
+      const ringRadius = radius * (1.06 + eased * 1.65);
+      const alpha = (1 - age) * (1 - age) * (0.2 + wave.strength * 0.35) * (0.75 + this.pulseEnergy * 0.4);
+      if (alpha <= 0.006) continue;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = this.toRgba(colorA, alpha);
+      ctx.lineWidth = Math.max(1, radius * (0.004 + (1 - age) * 0.0045));
+      ctx.stroke();
     }
   }
 
