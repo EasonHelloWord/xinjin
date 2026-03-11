@@ -65,6 +65,9 @@ class AliyunTtsSession {
   private upstream: WebSocket | null = null;
   private taskId = makeAliyunId();
   private activeRequestId = "";
+  private activeVoice = TTS_VOICE;
+  private activeFormat = TTS_FORMAT;
+  private activeSampleRate = TTS_SAMPLE_RATE;
   private started = false;
   private startWaiter: {
     resolve: () => void;
@@ -116,6 +119,12 @@ class AliyunTtsSession {
           this.startWaiter = null;
         }
         send(this.downstream, "tts_started", { requestId: this.activeRequestId });
+        send(this.downstream, "tts_meta", {
+          provider: "aliyun",
+          voice: this.activeVoice,
+          format: this.activeFormat,
+          sampleRate: this.activeSampleRate
+        });
         return;
       }
       if (name === "SentenceSynthesis") {
@@ -178,6 +187,9 @@ class AliyunTtsSession {
     this.taskId = makeAliyunId();
     this.activeRequestId = requestId;
     this.started = false;
+    this.activeVoice = opts.voice || TTS_VOICE;
+    this.activeFormat = opts.format || TTS_FORMAT;
+    this.activeSampleRate = Number(opts.sampleRate) || TTS_SAMPLE_RATE;
     const joinTokenToUrl = (base: string, token: string): string => {
       if (!token) return base;
       if (base.includes("token=")) return base;
@@ -203,9 +215,9 @@ class AliyunTtsSession {
     });
 
     this.sendUpstreamFrame("StartSynthesis", {
-      voice: opts.voice || TTS_VOICE,
-      format: opts.format || TTS_FORMAT,
-      sample_rate: Number(opts.sampleRate) || TTS_SAMPLE_RATE,
+      voice: this.activeVoice,
+      format: this.activeFormat,
+      sample_rate: this.activeSampleRate,
       volume: TTS_VOLUME,
       speech_rate: TTS_SPEECH_RATE,
       pitch_rate: TTS_PITCH_RATE
@@ -289,7 +301,13 @@ const decodeTextMessage = (raw: RawData): string => {
 export const registerVoiceWs = async (fastify: FastifyInstance): Promise<void> => {
   fastify.get("/voice", { websocket: true }, (socket) => {
     send(socket, "voice_ready", {
-      mode: hasAliyunTtsConfig() ? "aliyun_tts+placeholder_asr" : "placeholder"
+      mode: hasAliyunTtsConfig() ? "aliyun_tts+placeholder_asr" : "placeholder",
+      tts: {
+        provider: hasAliyunTtsConfig() ? "aliyun" : "none",
+        voice: TTS_VOICE,
+        format: TTS_FORMAT,
+        sampleRate: TTS_SAMPLE_RATE
+      }
     });
     const ttsSession = new AliyunTtsSession(fastify, socket);
 

@@ -48,6 +48,7 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
   const [loading, setLoading] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
+  const [ttsMetaLabel, setTtsMetaLabel] = useState("TTS: 未连接");
   const [error, setError] = useState<string | null>(null);
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -116,6 +117,9 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
   };
 
   useEffect(() => {
+    const offTtsMeta = voiceTts.onMeta((meta) => {
+      setTtsMetaLabel(`TTS: ${meta.provider} | voice=${meta.voice} | ${meta.format}@${meta.sampleRate}`);
+    });
     const offVoiceStatus = voiceInput.onStatus(setVoiceStatus);
     const offMeter = voiceInput.onMeter((meter) => {
       binsRef.current = meter.bins;
@@ -129,6 +133,7 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
       offVoiceStatus();
       offMeter();
       offTranscript();
+      offTtsMeta();
       stopSpeech();
       voiceInput.stop();
     };
@@ -370,6 +375,9 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
           <input type="checkbox" checked={voiceEnabled} onChange={(e) => setVoiceEnabled(e.target.checked)} />
           {voiceOutputLabel}
         </label>
+      </div>
+      <div className="session-row">
+        <span className="session-single">{ttsMetaLabel}</span>
       </div>
 
       <div className="chat-messages" ref={messagesRef}>
