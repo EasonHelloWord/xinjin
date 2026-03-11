@@ -27,8 +27,9 @@ const OPENAI_API_KEY = env("OPENAI_API_KEY");
 const OPENAI_BASE_URL = env("OPENAI_BASE_URL", "https://api.openai.com/v1");
 const OPENAI_TTS_MODEL = env("OPENAI_TTS_MODEL", "gpt-4o-mini-tts");
 const OPENAI_TTS_VOICE = env("OPENAI_TTS_VOICE", "alloy");
-const OPENAI_TTS_FORMAT = env("OPENAI_TTS_FORMAT", "pcm");
+const OPENAI_TTS_FORMAT = env("OPENAI_TTS_FORMAT", "mp3");
 const OPENAI_TTS_SAMPLE_RATE = Number(env("OPENAI_TTS_SAMPLE_RATE", "24000")) || 24000;
+const OPENAI_TTS_SPEED = Math.max(0.25, Math.min(4, Number(env("OPENAI_TTS_SPEED", "1.0")) || 1.0));
 const OPENAI_TTS_INSTRUCTIONS = env("OPENAI_TTS_INSTRUCTIONS");
 
 const hasOpenAiTtsConfig = (): boolean => Boolean(OPENAI_API_KEY) && TTS_PROVIDER === "openai";
@@ -52,9 +53,6 @@ type TtsCommand = {
   action: TtsAction;
   requestId?: string;
   text?: string;
-  voice?: string;
-  format?: string;
-  sampleRate?: number;
 };
 
 const decodeTextMessage = (raw: RawData): string => {
@@ -68,13 +66,10 @@ const decodeTextMessage = (raw: RawData): string => {
 class OpenAiTtsSession {
   private stagedText = "";
   private stagedRequestId = "";
-  private stagedVoice = OPENAI_TTS_VOICE;
-  private stagedFormat = OPENAI_TTS_FORMAT;
-  private stagedSampleRate = OPENAI_TTS_SAMPLE_RATE;
 
   constructor(private readonly fastify: FastifyInstance, private readonly downstream: WebSocket) {}
 
-  private async synthesize(requestId: string, text: string, opts: { voice?: string; format?: string; sampleRate?: number }): Promise<void> {
+  private async synthesize(requestId: string, text: string): Promise<void> {
     if (!hasOpenAiTtsConfig()) {
       send(this.downstream, "tts_error", {
         requestId,
@@ -89,9 +84,9 @@ class OpenAiTtsSession {
       return;
     }
 
-    const voice = (opts.voice || OPENAI_TTS_VOICE).trim();
-    const format = (opts.format || OPENAI_TTS_FORMAT).trim().toLowerCase();
-    const sampleRate = Number(opts.sampleRate) || OPENAI_TTS_SAMPLE_RATE;
+    const voice = OPENAI_TTS_VOICE;
+    const format = OPENAI_TTS_FORMAT.trim().toLowerCase();
+    const sampleRate = OPENAI_TTS_SAMPLE_RATE;
 
     try {
       send(this.downstream, "tts_started", { requestId });
@@ -99,7 +94,8 @@ class OpenAiTtsSession {
         provider: "openai",
         voice,
         format,
-        sampleRate
+        sampleRate,
+        speed: OPENAI_TTS_SPEED
       });
 
       const client = getOpenAiClient();
@@ -108,6 +104,7 @@ class OpenAiTtsSession {
         voice,
         input,
         response_format: format as "mp3" | "opus" | "aac" | "flac" | "wav" | "pcm",
+        speed: OPENAI_TTS_SPEED,
         ...(OPENAI_TTS_INSTRUCTIONS ? { instructions: OPENAI_TTS_INSTRUCTIONS } : {})
       });
       const bytes = Buffer.from(await response.arrayBuffer());
@@ -128,22 +125,20 @@ class OpenAiTtsSession {
     const requestId = command.requestId || randomUUID().replace(/-/g, "");
 
     if (command.action === "tts_speak") {
-      await this.synthesize(requestId, command.text || "", command);
+      await this.synthesize(requestId, command.text || "");
       return;
     }
 
     if (command.action === "tts_start") {
       this.stagedText = "";
       this.stagedRequestId = requestId;
-      this.stagedVoice = command.voice || OPENAI_TTS_VOICE;
-      this.stagedFormat = command.format || OPENAI_TTS_FORMAT;
-      this.stagedSampleRate = Number(command.sampleRate) || OPENAI_TTS_SAMPLE_RATE;
       send(this.downstream, "tts_started", { requestId });
       send(this.downstream, "tts_meta", {
         provider: "openai",
-        voice: this.stagedVoice,
-        format: this.stagedFormat,
-        sampleRate: this.stagedSampleRate
+        voice: OPENAI_TTS_VOICE,
+        format: OPENAI_TTS_FORMAT,
+        sampleRate: OPENAI_TTS_SAMPLE_RATE,
+        speed: OPENAI_TTS_SPEED
       });
       return;
     }
@@ -157,14 +152,9 @@ class OpenAiTtsSession {
     if (command.action === "tts_stop") {
       const rid = this.stagedRequestId || requestId;
       const text = this.stagedText;
-      const opts = {
-        voice: this.stagedVoice,
-        format: this.stagedFormat,
-        sampleRate: this.stagedSampleRate
-      };
       this.stagedRequestId = "";
       this.stagedText = "";
-      await this.synthesize(rid, text, opts);
+      await this.synthesize(rid, text);
     }
   }
 }
@@ -176,7 +166,8 @@ export const registerVoiceWs = async (fastify: FastifyInstance): Promise<void> =
       provider: hasOpenAiTtsConfig() ? "openai" : "none",
       voice: OPENAI_TTS_VOICE,
       format: OPENAI_TTS_FORMAT,
-      sampleRate: OPENAI_TTS_SAMPLE_RATE
+      sampleRate: OPENAI_TTS_SAMPLE_RATE,
+      speed: OPENAI_TTS_SPEED
     });
     const ttsSession = new OpenAiTtsSession(fastify, socket);
 

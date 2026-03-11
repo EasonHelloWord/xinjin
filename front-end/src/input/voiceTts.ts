@@ -14,6 +14,7 @@ type VoiceEnvelope = {
     message?: string;
     format?: string;
     sampleRate?: number;
+    speed?: number;
   };
 };
 
@@ -27,8 +28,9 @@ export class VoiceTts {
   private debugListeners = new Set<DebugListener>();
   private audioContext: AudioContext | null = null;
   private nextPlayAt = 0;
-  private sampleRate = 16000;
-  private format = "pcm";
+  private sampleRate = 24000;
+  private format = "mp3";
+  private speed = 1.0;
 
   private emitDebug(line: string): void {
     this.debugListeners.forEach((listener) => listener(line));
@@ -91,7 +93,7 @@ export class VoiceTts {
 
   private ensureAudioContext(): AudioContext {
     if (!this.audioContext) {
-      this.audioContext = new AudioContext({ sampleRate: this.sampleRate });
+      this.audioContext = new AudioContext();
       this.nextPlayAt = this.audioContext.currentTime;
     }
     return this.audioContext;
@@ -125,7 +127,9 @@ export class VoiceTts {
       if (fmt) this.format = fmt;
       const sr = Number(parsed.payload?.sampleRate);
       if (Number.isFinite(sr) && sr > 3000) this.sampleRate = sr;
-      this.emitDebug(`tts meta: format=${this.format} sampleRate=${this.sampleRate}`);
+      const spd = Number(parsed.payload?.speed);
+      if (Number.isFinite(spd) && spd > 0) this.speed = spd;
+      this.emitDebug(`tts meta: format=${this.format} sampleRate=${this.sampleRate} speed=${this.speed}`);
       return;
     }
 
@@ -215,7 +219,9 @@ export class VoiceTts {
     }
 
     const requestId = makeReqId();
-    this.emitDebug(`tts speak: requestId=${requestId} format=${this.format} sampleRate=${this.sampleRate}`);
+    this.emitDebug(
+      `tts speak: requestId=${requestId} format=${this.format} sampleRate=${this.sampleRate} speed=${this.speed}`
+    );
     const done = new Promise<void>((resolve, reject) => {
       this.pending.set(requestId, { resolve, reject });
     });
@@ -223,9 +229,7 @@ export class VoiceTts {
       JSON.stringify({
         action: "tts_speak",
         requestId,
-        text: normalized,
-        format: this.format,
-        sampleRate: this.sampleRate
+        text: normalized
       })
     );
 
