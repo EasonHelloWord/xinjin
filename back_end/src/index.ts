@@ -67,6 +67,21 @@ const createServer = async () => {
       return;
     }
 
+    if (err.code === "SQLITE_CONSTRAINT" && typeof err.message === "string") {
+      const request = _request;
+      fastify.log.error(
+        { method: request.method, url: request.url, code: err.code, message: err.message },
+        "SQLite constraint failure"
+      );
+      reply.status(409).send({
+        error: {
+          code: "DB_CONSTRAINT",
+          message: "Data constraint check failed"
+        }
+      });
+      return;
+    }
+
     fastify.log.error({ err: error }, "Unhandled error");
     reply.status(500).send({
       error: {

@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import { getDb } from "./db";
 import { unauthorized } from "./errors";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
@@ -41,6 +42,11 @@ export const authMiddleware = async (request: FastifyRequest, _reply: FastifyRep
     throw unauthorized("Token subject is missing");
   }
 
+  const db = await getDb();
+  const user = await db.get<{ id: string }>("SELECT id FROM users WHERE id = ? LIMIT 1", sub);
+  if (!user) {
+    throw unauthorized("User not found for this token");
+  }
+
   request.authUserId = sub;
 };
-
