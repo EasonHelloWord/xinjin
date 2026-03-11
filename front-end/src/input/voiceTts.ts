@@ -10,18 +10,7 @@ type VoiceEnvelope = {
   payload?: {
     requestId?: string;
     message?: string;
-    provider?: string;
-    voice?: string;
-    format?: string;
-    sampleRate?: number;
   };
-};
-
-type TtsMeta = {
-  provider: string;
-  voice: string;
-  format: string;
-  sampleRate: number;
 };
 
 const makeReqId = (): string => `tts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -34,23 +23,6 @@ export class VoiceTts {
   private audioContext: AudioContext | null = null;
   private nextPlayAt = 0;
   private sampleRate = 16000;
-  private meta: TtsMeta = {
-    provider: "unknown",
-    voice: "unknown",
-    format: "pcm",
-    sampleRate: 16000
-  };
-  private metaListeners = new Set<(meta: TtsMeta) => void>();
-
-  onMeta(cb: (meta: TtsMeta) => void): () => void {
-    this.metaListeners.add(cb);
-    cb(this.meta);
-    return () => this.metaListeners.delete(cb);
-  }
-
-  private emitMeta(): void {
-    this.metaListeners.forEach((cb) => cb(this.meta));
-  }
 
   private async ensureSocket(): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN && this.ready) return;
@@ -118,26 +90,6 @@ export class VoiceTts {
 
     if (parsed.type === "voice_ready") {
       this.ready = true;
-      this.meta = {
-        provider: parsed.payload?.provider || "unknown",
-        voice: parsed.payload?.voice || "unknown",
-        format: parsed.payload?.format || "pcm",
-        sampleRate: Number(parsed.payload?.sampleRate) || this.sampleRate
-      };
-      this.sampleRate = this.meta.sampleRate;
-      this.emitMeta();
-      return;
-    }
-
-    if (parsed.type === "tts_meta") {
-      this.meta = {
-        provider: parsed.payload?.provider || "aliyun",
-        voice: parsed.payload?.voice || this.meta.voice,
-        format: parsed.payload?.format || this.meta.format,
-        sampleRate: Number(parsed.payload?.sampleRate) || this.meta.sampleRate
-      };
-      this.sampleRate = this.meta.sampleRate;
-      this.emitMeta();
       return;
     }
 
@@ -200,10 +152,7 @@ export class VoiceTts {
       JSON.stringify({
         action: "tts_speak",
         requestId,
-        text: normalized,
-        voice: this.meta.voice !== "unknown" ? this.meta.voice : undefined,
-        format: this.meta.format || "pcm",
-        sampleRate: this.meta.sampleRate || this.sampleRate
+        text: normalized
       })
     );
 
