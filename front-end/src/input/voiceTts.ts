@@ -10,6 +10,8 @@ type VoiceEnvelope = {
   payload?: {
     requestId?: string;
     message?: string;
+    format?: string;
+    sampleRate?: number;
   };
 };
 
@@ -23,6 +25,7 @@ export class VoiceTts {
   private audioContext: AudioContext | null = null;
   private nextPlayAt = 0;
   private sampleRate = 16000;
+  private format = "pcm";
 
   private async ensureSocket(): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN && this.ready) return;
@@ -47,11 +50,11 @@ export class VoiceTts {
           return;
         }
         if (event.data instanceof ArrayBuffer) {
-          this.playPcmChunk(event.data);
+          this.handleAudioChunk(event.data);
           return;
         }
         if (event.data instanceof Blob) {
-          void event.data.arrayBuffer().then((buf) => this.playPcmChunk(buf));
+          void event.data.arrayBuffer().then((buf) => this.handleAudioChunk(buf));
         }
       };
 
@@ -93,6 +96,14 @@ export class VoiceTts {
       return;
     }
 
+    if (parsed.type === "tts_meta") {
+      const fmt = (parsed.payload?.format || "").trim().toLowerCase();
+      if (fmt) this.format = fmt;
+      const sr = Number(parsed.payload?.sampleRate);
+      if (Number.isFinite(sr) && sr > 3000) this.sampleRate = sr;
+      return;
+    }
+
     if (parsed.type === "tts_done") {
       const rid = parsed.payload?.requestId || "";
       const pending = this.pending.get(rid);
@@ -116,13 +127,45 @@ export class VoiceTts {
     }
   }
 
+  private handleAudioChunk(buf: ArrayBuffer): void {
+    if (this.format === "pcm") {
+      this.playPcmChunk(buf);
+      return;
+    }
+    void this.playEncodedChunk(buf);
+  }
+
+  private async playEncodedChunk(buf: ArrayBuffer): Promise<void> {
+    if (!buf.byteLength) return;
+    const ctx = this.ensureAudioContext();
+    if (ctx.state === "suspended") {
+      try {
+        await ctx.resume();
+      } catch {
+        // wait for next user gesture
+      }
+    }
+    const decoded = await ctx.decodeAudioData(buf.slice(0));
+    const source = ctx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(ctx.destination);
+    const startAt = Math.max(ctx.currentTime, this.nextPlayAt);
+    source.start(startAt);
+    this.nextPlayAt = startAt + decoded.duration;
+  }
+
   private playPcmChunk(buf: ArrayBuffer): void {
     if (buf.byteLength < 2) return;
     const ctx = this.ensureAudioContext();
-    const i16 = new Int16Array(buf);
-    const f32 = new Float32Array(i16.length);
-    for (let i = 0; i < i16.length; i++) {
-      f32[i] = i16[i] / 32768;
+    if (ctx.state === "suspended") {
+      void ctx.resume().catch(() => undefined);
+    }
+    const samples = Math.floor(buf.byteLength / 2);
+    if (samples <= 0) return;
+    const view = new DataView(buf);
+    const f32 = new Float32Array(samples);
+    for (let i = 0; i < samples; i++) {
+      f32[i] = view.getInt16(i * 2, true) / 32768;
     }
 
     const audioBuffer = ctx.createBuffer(1, f32.length, this.sampleRate);
@@ -152,7 +195,9 @@ export class VoiceTts {
       JSON.stringify({
         action: "tts_speak",
         requestId,
-        text: normalized
+        text: normalized,
+        format: this.format,
+        sampleRate: this.sampleRate
       })
     );
 
