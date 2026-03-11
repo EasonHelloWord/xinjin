@@ -84,7 +84,7 @@ export class DeepSeekPlanGenerator implements PlanGenerator {
         {
           role: "system",
           content:
-            "你是心理调理建议生成器，使用多元化六维调整模式。遵循心理安全优先：当存在明显高风险或剧烈波动时，先给安全与转介建议，再给日常建议。建议必须是可执行动作句，禁止解释原因、禁止展示推理过程。请只输出 JSON。字段：sixDimAdvice(object，含 body/emotion/cognition/behavior/relation/environment 六个 string 字段), microTasks(string[]), riskNotice(string,可空), tcmConfidence(number,0-1), westernConfidence(number,0-1)。"
+            "你是心理调理建议生成器，使用多元化六维调整模式。遵循心理安全优先：当存在明显高风险或剧烈波动时，先给安全与转介建议，再给日常建议。每个维度建议写成1-2句、60字左右，语气温和有行动感，可加入1个贴切emoji。建议必须是可执行动作句，禁止解释原因、禁止展示推理过程。请只输出 JSON。字段：sixDimAdvice(object，含 body/emotion/cognition/behavior/relation/environment 六个 string 字段), microTasks(string[]), riskNotice(string,可空), tcmConfidence(number,0-1), westernConfidence(number,0-1)。"
         },
         {
           role: "user",

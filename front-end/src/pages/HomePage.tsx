@@ -87,6 +87,18 @@ const resolveSixDimAdvice = (analysisResult: AnalysisResult) => {
   };
 };
 
+const DIMENSION_LEFT = [
+  { key: "body", title: "身体调理", emoji: "🫁" },
+  { key: "emotion", title: "情绪调理", emoji: "💛" },
+  { key: "cognition", title: "认知调理", emoji: "🧠" }
+] as const;
+
+const DIMENSION_RIGHT = [
+  { key: "behavior", title: "行为调理", emoji: "🚶" },
+  { key: "relation", title: "关系调理", emoji: "🤝" },
+  { key: "environment", title: "环境调理", emoji: "🌿" }
+] as const;
+
 export function HomePage({ onLogout }: HomePageProps): JSX.Element {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const controller = useMemo(() => new CloudController(), []);
@@ -244,22 +256,33 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
 
       {stage === "result" && analysisResult && (
         <>
+          <div className="state-hint-box">
+            <div className="state-hint-title">{"🧭 状态提示"}</div>
+            <div className="state-hint-text">{`${stateTypeLabel(analysisResult.stateType)} ｜ ${levelLabel(analysisResult.level)}`}</div>
+            {adviceUpdating && <div className="state-hint-sub">{"正在根据最新聊天更新建议..."}</div>}
+          </div>
+
           <aside className="mind-side mind-side-left">
             <h3>{"六维调理（左）"}</h3>
-            <div className="advice-item">{`状态提示：${stateTypeLabel(analysisResult.stateType)} | ${levelLabel(analysisResult.level)}`}</div>
-            <div className="advice-item">{`【身体调理】${sixDimAdvice?.body ?? ""}`}</div>
-            <div className="advice-item">{`【情绪调理】${sixDimAdvice?.emotion ?? ""}`}</div>
-            <div className="advice-item">{`【认知调理】${sixDimAdvice?.cognition ?? ""}`}</div>
+            {DIMENSION_LEFT.map((item) => (
+              <article key={item.key} className="advice-block">
+                <div className="advice-title">{`${item.emoji} ${item.title}`}</div>
+                <div className="advice-body">{sixDimAdvice?.[item.key] ?? ""}</div>
+              </article>
+            ))}
           </aside>
           <aside className="mind-side mind-side-right">
             <h3>{"六维调理（右）"}</h3>
-            {adviceUpdating && <div className="advice-item">{"根据最新聊天更新建议中..."}</div>}
-            <div className="advice-item">{`【行为调理】${sixDimAdvice?.behavior ?? ""}`}</div>
-            <div className="advice-item">{`【关系调理】${sixDimAdvice?.relation ?? ""}`}</div>
-            <div className="advice-item">{`【环境调理】${sixDimAdvice?.environment ?? ""}`}</div>
+            {DIMENSION_RIGHT.map((item) => (
+              <article key={item.key} className="advice-block">
+                <div className="advice-title">{`${item.emoji} ${item.title}`}</div>
+                <div className="advice-body">{sixDimAdvice?.[item.key] ?? ""}</div>
+              </article>
+            ))}
+            <div className="advice-title">{"✨ 今日微任务"}</div>
             <div className="task-list">
-              {analysisResult.microTasks.map((item) => (
-                <span key={item}>{item}</span>
+              {analysisResult.microTasks.map((item, idx) => (
+                <span key={item}>{`${idx + 1}. ${item}`}</span>
               ))}
             </div>
             {analysisResult.riskNotice && <div className="risk-notice">{analysisResult.riskNotice}</div>}
