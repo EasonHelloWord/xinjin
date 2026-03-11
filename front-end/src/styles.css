@@ -463,6 +463,17 @@ select {
   color: var(--text-muted);
 }
 
+.state-hint-risk {
+  margin-top: 4px;
+  border: 1px solid var(--danger-border);
+  background: var(--danger-bg);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8d3f3f;
+}
+
 .mind-stage-overlay {
   position: absolute;
   top: 8%;

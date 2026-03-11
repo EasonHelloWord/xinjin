@@ -260,6 +260,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
             <div className="state-hint-title">{"🧭 状态提示"}</div>
             <div className="state-hint-text">{`${stateTypeLabel(analysisResult.stateType)} ｜ ${levelLabel(analysisResult.level)}`}</div>
             {adviceUpdating && <div className="state-hint-sub">{"正在根据最新聊天更新建议..."}</div>}
+            {analysisResult.riskNotice && <div className="state-hint-risk">{`⚠️ ${analysisResult.riskNotice}`}</div>}
           </div>
 
           <aside className="mind-side mind-side-left">
@@ -285,7 +286,6 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
                 <span key={item}>{`${idx + 1}. ${item}`}</span>
               ))}
             </div>
-            {analysisResult.riskNotice && <div className="risk-notice">{analysisResult.riskNotice}</div>}
           </aside>
         </>
       )}
