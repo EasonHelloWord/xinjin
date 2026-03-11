@@ -48,6 +48,7 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
   const [loading, setLoading] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
+  const [voiceDebug, setVoiceDebug] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -117,6 +118,12 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
 
   useEffect(() => {
     const offVoiceStatus = voiceInput.onStatus(setVoiceStatus);
+    const offVoiceDebug = voiceTts.onDebug((line) => {
+      setVoiceDebug((prev) => {
+        const next = [...prev, `${new Date().toLocaleTimeString()} ${line}`];
+        return next.slice(-6);
+      });
+    });
     const offMeter = voiceInput.onMeter((meter) => {
       binsRef.current = meter.bins;
       levelRef.current = meter.level;
@@ -127,6 +134,7 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
     });
     return () => {
       offVoiceStatus();
+      offVoiceDebug();
       offMeter();
       offTranscript();
       stopSpeech();
@@ -398,6 +406,17 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
       </div>
 
       {error && <div className="message-box">{error}</div>}
+      <div className="voice-debug-box">
+        {voiceDebug.length > 0 ? (
+          voiceDebug.map((line, idx) => (
+            <div key={`${idx}-${line}`} className="voice-debug-line">
+              {line}
+            </div>
+          ))
+        ) : (
+          <div className="voice-debug-line">语音调试：等待事件...</div>
+        )}
+      </div>
 
       {mode === "text" ? (
         <form onSubmit={onSubmit} className="chat-form">

@@ -5,6 +5,8 @@ type PendingSpeak = {
   reject: (err: Error) => void;
 };
 
+type DebugListener = (line: string) => void;
+
 type VoiceEnvelope = {
   type?: string;
   payload?: {
@@ -22,10 +24,20 @@ export class VoiceTts {
   private ready = false;
   private connectPromise: Promise<void> | null = null;
   private pending = new Map<string, PendingSpeak>();
+  private debugListeners = new Set<DebugListener>();
   private audioContext: AudioContext | null = null;
   private nextPlayAt = 0;
   private sampleRate = 16000;
   private format = "pcm";
+
+  private emitDebug(line: string): void {
+    this.debugListeners.forEach((listener) => listener(line));
+  }
+
+  onDebug(listener: DebugListener): () => void {
+    this.debugListeners.add(listener);
+    return () => this.debugListeners.delete(listener);
+  }
 
   private async ensureSocket(): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN && this.ready) return;
@@ -37,10 +49,12 @@ export class VoiceTts {
       this.ws = ws;
 
       ws.onopen = () => {
+        this.emitDebug(`voice ws open: ${APP_CONFIG.voiceStreamUrl}`);
         resolve();
       };
 
       ws.onerror = () => {
+        this.emitDebug("voice ws error");
         reject(new Error("TTS websocket error"));
       };
 
@@ -61,6 +75,7 @@ export class VoiceTts {
       ws.onclose = () => {
         this.ready = false;
         this.ws = null;
+        this.emitDebug("voice ws closed");
       };
     })
       .then(() => {
@@ -87,6 +102,7 @@ export class VoiceTts {
     if (ctx.state !== "running") {
       await ctx.resume();
     }
+    this.emitDebug(`audio context: ${ctx.state}, sampleRate=${ctx.sampleRate}`);
   }
 
   private handleTextFrame(text: string): void {
@@ -100,6 +116,7 @@ export class VoiceTts {
 
     if (parsed.type === "voice_ready") {
       this.ready = true;
+      this.emitDebug("voice ready");
       return;
     }
 
@@ -108,11 +125,13 @@ export class VoiceTts {
       if (fmt) this.format = fmt;
       const sr = Number(parsed.payload?.sampleRate);
       if (Number.isFinite(sr) && sr > 3000) this.sampleRate = sr;
+      this.emitDebug(`tts meta: format=${this.format} sampleRate=${this.sampleRate}`);
       return;
     }
 
     if (parsed.type === "tts_done") {
       const rid = parsed.payload?.requestId || "";
+      this.emitDebug(`tts done: requestId=${rid || "-"}`);
       const pending = this.pending.get(rid);
       if (pending) {
         pending.resolve();
@@ -124,6 +143,7 @@ export class VoiceTts {
     if (parsed.type === "tts_error") {
       const rid = parsed.payload?.requestId || "";
       const message = parsed.payload?.message || "TTS failed";
+      this.emitDebug(`tts error: requestId=${rid || "-"} message=${message}`);
       if (rid) {
         const pending = this.pending.get(rid);
         if (pending) {
@@ -195,6 +215,7 @@ export class VoiceTts {
     }
 
     const requestId = makeReqId();
+    this.emitDebug(`tts speak: requestId=${requestId} format=${this.format} sampleRate=${this.sampleRate}`);
     const done = new Promise<void>((resolve, reject) => {
       this.pending.set(requestId, { resolve, reject });
     });

@@ -150,6 +150,23 @@ select {
   font-size: 12px;
 }
 
+.voice-debug-box {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-main);
+  background: var(--surface-muted);
+  max-height: 78px;
+  overflow: auto;
+}
+
+.voice-debug-line {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .chat-dock {
   position: absolute;
   left: 16px;
