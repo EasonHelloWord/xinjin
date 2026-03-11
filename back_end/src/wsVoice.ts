@@ -47,10 +47,14 @@ type UpstreamMessage = {
   header?: {
     name?: string;
     status?: number;
+    status_text?: string;
     task_id?: string;
   };
   payload?: {
     message?: string;
+    code?: string;
+    status?: number;
+    status_text?: string;
     index?: number;
     text?: string;
   };
@@ -60,6 +64,12 @@ class AliyunTtsSession {
   private upstream: WebSocket | null = null;
   private taskId = randomUUID();
   private activeRequestId = "";
+  private started = false;
+  private startWaiter: {
+    resolve: () => void;
+    reject: (err: Error) => void;
+    timer: NodeJS.Timeout;
+  } | null = null;
 
   constructor(private readonly fastify: FastifyInstance, private readonly downstream: WebSocket) {}
 
@@ -98,6 +108,12 @@ class AliyunTtsSession {
 
       const name = parsed?.header?.name || "";
       if (name === "SynthesisStarted") {
+        this.started = true;
+        if (this.startWaiter) {
+          clearTimeout(this.startWaiter.timer);
+          this.startWaiter.resolve();
+          this.startWaiter = null;
+        }
         send(this.downstream, "tts_started", { requestId: this.activeRequestId });
         return;
       }
@@ -114,15 +130,32 @@ class AliyunTtsSession {
         return;
       }
       if (name === "TaskFailed") {
+        const details =
+          parsed?.payload?.message ||
+          parsed?.payload?.status_text ||
+          parsed?.header?.status_text ||
+          "Aliyun TTS task failed";
+        if (this.startWaiter) {
+          clearTimeout(this.startWaiter.timer);
+          this.startWaiter.reject(new Error(details));
+          this.startWaiter = null;
+        }
         send(this.downstream, "tts_error", {
           requestId: this.activeRequestId,
-          message: parsed?.payload?.message || "Aliyun TTS task failed"
+          message: details,
+          status: parsed?.header?.status ?? parsed?.payload?.status ?? null,
+          code: parsed?.payload?.code ?? null
         });
       }
     });
 
     upstream.on("error", (err) => {
       this.fastify.log.error({ err }, "Aliyun TTS upstream error");
+      if (this.startWaiter) {
+        clearTimeout(this.startWaiter.timer);
+        this.startWaiter.reject(err instanceof Error ? err : new Error("Aliyun TTS upstream error"));
+        this.startWaiter = null;
+      }
       send(this.downstream, "tts_error", {
         requestId: this.activeRequestId,
         message: "Aliyun TTS upstream error"
@@ -131,6 +164,7 @@ class AliyunTtsSession {
 
     upstream.on("close", () => {
       this.upstream = null;
+      this.started = false;
     });
   }
 
@@ -138,10 +172,11 @@ class AliyunTtsSession {
     requestId: string,
     opts: { voice?: string; format?: string; sampleRate?: number }
   ): Promise<void> {
-    if (this.upstream && this.upstream.readyState === WebSocket.OPEN) return;
+    if (this.upstream && this.upstream.readyState === WebSocket.OPEN && this.started) return;
 
     this.taskId = randomUUID();
     this.activeRequestId = requestId;
+    this.started = false;
     const joinTokenToUrl = (base: string, token: string): string => {
       if (!token) return base;
       if (base.includes("token=")) return base;
@@ -173,6 +208,16 @@ class AliyunTtsSession {
       volume: TTS_VOLUME,
       speech_rate: TTS_SPEECH_RATE,
       pitch_rate: TTS_PITCH_RATE
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (this.startWaiter) {
+          this.startWaiter = null;
+          reject(new Error("Aliyun TTS start timeout"));
+        }
+      }, 10_000);
+      this.startWaiter = { resolve, reject, timer };
     });
   }
 
