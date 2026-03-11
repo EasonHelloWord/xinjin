@@ -71,6 +71,22 @@ const stateTypeLabel = (stateType: StateType): string => {
   return "波动混合型";
 };
 
+const resolveSixDimAdvice = (analysisResult: AnalysisResult) => {
+  const six = analysisResult.sixDimAdvice;
+  if (six?.body && six?.emotion && six?.cognition && six?.behavior && six?.relation && six?.environment) {
+    return six;
+  }
+
+  return {
+    body: analysisResult.tcmAdvice?.[0] ?? "",
+    emotion: analysisResult.tcmAdvice?.[1] ?? "",
+    cognition: analysisResult.tcmAdvice?.[2] ?? "",
+    behavior: analysisResult.westernAdvice?.[0] ?? "",
+    relation: analysisResult.westernAdvice?.[1] ?? "",
+    environment: analysisResult.westernAdvice?.[2] ?? ""
+  };
+};
+
 export function HomePage({ onLogout }: HomePageProps): JSX.Element {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const controller = useMemo(() => new CloudController(), []);
@@ -87,6 +103,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
   const pulseRafRef = useRef<number | null>(null);
   const adviceReqSeqRef = useRef(0);
   const recentUserTextsRef = useRef<string[]>([]);
+  const sixDimAdvice = analysisResult ? resolveSixDimAdvice(analysisResult) : null;
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -172,7 +189,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
 
       const analysis = await api.analyzeState({
         assessmentId: result.id,
-        text: "用户已完成20题心理状态问卷，请结合总分与分部分得分，给出首轮状态提示、中医调理建议、西医/心理建议与微任务。"
+        text: "用户已完成20题心理状态问卷，请结合总分与分部分得分，给出首轮状态提示，并按身体、情绪、认知、行为、关系、环境六个维度分别给出1条可执行建议，同时给出今日微任务。"
       });
       setAnalysisResult(analysis);
       setStage("result");
@@ -228,24 +245,18 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
       {stage === "result" && analysisResult && (
         <>
           <aside className="mind-side mind-side-left">
-            <h3>{"中医调理"}</h3>
-            <div className="advice-item">{`调试：可信度 ${Math.round((analysisResult.confidence?.tcm ?? 0.68) * 100)}%`}</div>
-            {analysisResult.tcmAdvice.map((item) => (
-              <div key={item} className="advice-item">
-                {item}
-              </div>
-            ))}
+            <h3>{"六维调理（左）"}</h3>
+            <div className="advice-item">{`状态提示：${stateTypeLabel(analysisResult.stateType)} | ${levelLabel(analysisResult.level)}`}</div>
+            <div className="advice-item">{`【身体调理】${sixDimAdvice?.body ?? ""}`}</div>
+            <div className="advice-item">{`【情绪调理】${sixDimAdvice?.emotion ?? ""}`}</div>
+            <div className="advice-item">{`【认知调理】${sixDimAdvice?.cognition ?? ""}`}</div>
           </aside>
           <aside className="mind-side mind-side-right">
-            <h3>{"西医/心理建议"}</h3>
-            <div className="advice-item">{`状态提示：${stateTypeLabel(analysisResult.stateType)} | ${levelLabel(analysisResult.level)}`}</div>
-            <div className="advice-item">{`调试：状态可信度 ${Math.round((analysisResult.confidence?.state ?? 0.65) * 100)}% | 西医/心理建议可信度 ${Math.round((analysisResult.confidence?.western ?? 0.68) * 100)}%`}</div>
+            <h3>{"六维调理（右）"}</h3>
             {adviceUpdating && <div className="advice-item">{"根据最新聊天更新建议中..."}</div>}
-            {analysisResult.westernAdvice.map((item) => (
-              <div key={item} className="advice-item">
-                {item}
-              </div>
-            ))}
+            <div className="advice-item">{`【行为调理】${sixDimAdvice?.behavior ?? ""}`}</div>
+            <div className="advice-item">{`【关系调理】${sixDimAdvice?.relation ?? ""}`}</div>
+            <div className="advice-item">{`【环境调理】${sixDimAdvice?.environment ?? ""}`}</div>
             <div className="task-list">
               {analysisResult.microTasks.map((item) => (
                 <span key={item}>{item}</span>

@@ -1,4 +1,4 @@
-import { AnalyzeInput, AnalyzeOutput, EmotionAnalyzer, PlanGenerator, PlanInput, PlanOutput } from "./types";
+import { AnalyzeInput, AnalyzeOutput, EmotionAnalyzer, PlanGenerator, PlanInput, PlanOutput, SixDimAdvice } from "./types";
 
 const pickStateType = (input: AnalyzeInput): AnalyzeOutput["stateType"] => {
   const text = input.text.toLowerCase();
@@ -85,62 +85,73 @@ const levelRiskNotice = (level: PlanInput["level"]): string | undefined => {
   return undefined;
 };
 
-const stateSpecificTcm = (stateType: PlanInput["stateType"]): string[] => {
-  if (stateType === "sensory_overload") {
-    return ["轻拍肘窝 3-5 分钟，配合缓慢呼气", "菊花枸杞茶或淡麦冬茶，减少咖啡因"];
+const buildSixDimAdvice = (input: PlanInput): SixDimAdvice => {
+  if (input.level === "severe") {
+    return {
+      body: "深呼吸3次：吸气4秒，屏住2秒，呼气6秒。每一次呼气，想象把胸口闷的感觉轻轻呼出去一点点。",
+      emotion: "给此刻情绪起个名字，比如“胸口这团叫石头”。轻轻对它说：“我知道你在，我先不处理你，只是看着你。”",
+      cognition: "写下脑子里出现的一个念头，然后画一条线，对自己说：“这是一个想法，不是事实。”",
+      behavior: "今天只做一件事：喝一杯温水。完成这件事，就够了。",
+      relation: "给一位信任的人发一条消息，哪怕只是“在吗”。如果发不出，就想一个让你感到安全的人。",
+      environment: "拉开窗帘，让自然光照进来。看五分钟窗外的世界，提醒自己世界还在运转。"
+    };
   }
-  if (stateType === "emotional_block") {
-    return ["温热足浴 10 分钟，结束后按揉内关穴与神门穴", "清淡温补饮食，避免过甜过辣刺激"];
-  }
-  return ["先做腹式呼吸，再进行颈肩轻拉伸 5 分钟", "白天补充温水，晚间减少高油高糖饮食"];
-};
 
-const stateSpecificWestern = (stateType: PlanInput["stateType"]): string[] => {
-  if (stateType === "sensory_overload") {
-    return ["执行 5 分钟呼吸节律训练（吸 4 秒、呼 6 秒）", "列出一件当下可完成的小任务并限时 20 分钟"];
+  if (input.level === "moderate" || input.stateType === "emotional_block") {
+    return {
+      body: "找个有阳光的地方，背对太阳坐10-15分钟，感受后背慢慢晒暖。",
+      emotion: "摸一摸身边某样东西，认真感受它的质感，用触觉轻轻唤醒感官。",
+      cognition: "写下今天看见的三件小事，不求意义，只保持和当下的连接。",
+      behavior: "今天只做一件微小的事：下楼慢走5分钟，感受脚底与地面的接触。",
+      relation: "给一位信任的人发一条简短消息，重点是“发出去了”，不强求回复。",
+      environment: "书桌旁放一杯温水，提醒自己可以像这杯水一样安静地待着。"
+    };
   }
-  if (stateType === "emotional_block") {
-    return ["做一次 3 分钟身体扫描，把注意力放回当下感受", "发一条低压力社交消息给可信任对象"];
-  }
-  return ["先完成 1 件低成本任务建立确定感", "记录当前触发因素与想法，做一次认知重评估"];
+
+  return {
+    body: "用4-7-8呼吸法降速：吸4秒、屏7秒、呼8秒，重复3-5次。",
+    emotion: "给脑子里的乱麻起个名字，然后对它说：“我知道了，你先待着。”",
+    cognition: "当脑子转不停时，对自己说：“停，现在不需要想清楚。”",
+    behavior: "关闭手机通知1-2小时，给自己一段“信息节食”时间。",
+    relation: "今天可以不回复任何消息，告诉身边的人你需要一点独处时间。",
+    environment: "整理书桌，只留下三样东西：一杯水、一盆绿植、一本纸质书。"
+  };
 };
 
 export class MockPlanGenerator implements PlanGenerator {
   async generate(input: PlanInput): Promise<PlanOutput> {
-    const tcmAdvice = stateSpecificTcm(input.stateType);
-    const westernAdvice = stateSpecificWestern(input.stateType);
-    const microTasks = ["现在开始 3 分钟呼吸或拉伸", "今天只完成 1 个最小行动并记录感受", "睡前写下明日第一步任务"];
-    const riskNotice = levelRiskNotice(input.level);
-
-    if (input.level === "mild") {
-      return {
-        tcmAdvice,
-        westernAdvice: westernAdvice.slice(0, 1),
-        microTasks,
-        riskNotice,
-        tcmConfidence: 0.72,
-        westernConfidence: 0.69
-      };
-    }
+    const sixDimAdvice = buildSixDimAdvice(input);
+    const riskNotice =
+      input.level === "severe"
+        ? "请尽快联系校心理咨询中心（21号楼101，电话021-50211131）或拨打上海市心理救援热线021-962525（24小时）。"
+        : levelRiskNotice(input.level);
 
     if (input.level === "severe") {
       return {
-        tcmAdvice: tcmAdvice.slice(0, 1),
-        westernAdvice,
-        microTasks,
+        sixDimAdvice,
+        microTasks: ["深呼吸3次，吸气时想象把稳定吸进来", "拉开窗帘，看窗外一分钟", "今晚泡一杯温水，双手捧着喝下"],
         riskNotice,
-        tcmConfidence: 0.62,
-        westernConfidence: 0.66
+        tcmConfidence: 0.64,
+        westernConfidence: 0.68
+      };
+    }
+
+    if (input.level === "moderate") {
+      return {
+        sixDimAdvice,
+        microTasks: ["喝一杯温水，感受温度从喉咙暖到胃里", "站起来轻轻踮脚尖，重复20次", "今晚早睡30分钟，拉严窗帘"],
+        riskNotice,
+        tcmConfidence: 0.7,
+        westernConfidence: 0.7
       };
     }
 
     return {
-      tcmAdvice,
-      westernAdvice,
-      microTasks,
+      sixDimAdvice,
+      microTasks: ["泡一杯茶，看着茶叶慢慢舒展", "闭眼30秒，听听周围有几种声音", "今晚早睡30分钟，睡前不碰手机"],
       riskNotice,
-      tcmConfidence: 0.7,
-      westernConfidence: 0.7
+      tcmConfidence: 0.74,
+      westernConfidence: 0.72
     };
   }
 }

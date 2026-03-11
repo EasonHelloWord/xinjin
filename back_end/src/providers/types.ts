@@ -15,6 +15,15 @@ export type AdviceConfidence = {
   western: number;
 };
 
+export interface SixDimAdvice {
+  body: string;
+  emotion: string;
+  cognition: string;
+  behavior: string;
+  relation: string;
+  environment: string;
+}
+
 export interface AnalyzeInput {
   text: string;
   level: UserLevel;
@@ -40,8 +49,7 @@ export interface PlanInput {
 }
 
 export interface PlanOutput {
-  tcmAdvice: string[];
-  westernAdvice: string[];
+  sixDimAdvice: SixDimAdvice;
   microTasks: string[];
   riskNotice?: string;
   tcmConfidence?: number;

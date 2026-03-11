@@ -84,7 +84,7 @@ export class DeepSeekPlanGenerator implements PlanGenerator {
         {
           role: "system",
           content:
-            "你是中西医结合干预建议生成器。遵循心理安全优先原则：当存在明显高风险或剧烈波动时，先给安全与转介建议，再给日常建议。建议必须是可执行动作句，禁止解释原因、禁止展示推理过程。请只输出 JSON。字段：tcmAdvice(string[]), westernAdvice(string[]), microTasks(string[]), riskNotice(string,可空), tcmConfidence(number,0-1), westernConfidence(number,0-1)。"
+            "你是心理调理建议生成器，使用多元化六维调整模式。遵循心理安全优先：当存在明显高风险或剧烈波动时，先给安全与转介建议，再给日常建议。建议必须是可执行动作句，禁止解释原因、禁止展示推理过程。请只输出 JSON。字段：sixDimAdvice(object，含 body/emotion/cognition/behavior/relation/environment 六个 string 字段), microTasks(string[]), riskNotice(string,可空), tcmConfidence(number,0-1), westernConfidence(number,0-1)。"
         },
         {
           role: "user",
@@ -94,22 +94,36 @@ export class DeepSeekPlanGenerator implements PlanGenerator {
 
       const parsed = parseJsonObject<Partial<PlanOutput>>(content);
       if (!parsed) return this.fallback.generate(input);
-
-      const tcmAdvice = Array.isArray(parsed.tcmAdvice) ? parsed.tcmAdvice.filter((x): x is string => typeof x === "string") : [];
-      const westernAdvice = Array.isArray(parsed.westernAdvice)
-        ? parsed.westernAdvice.filter((x): x is string => typeof x === "string")
-        : [];
+      const sixDimRaw = parsed.sixDimAdvice as Partial<PlanOutput["sixDimAdvice"]> | undefined;
+      const sixDimAdvice = sixDimRaw
+        ? {
+            body: typeof sixDimRaw.body === "string" ? sixDimRaw.body : "",
+            emotion: typeof sixDimRaw.emotion === "string" ? sixDimRaw.emotion : "",
+            cognition: typeof sixDimRaw.cognition === "string" ? sixDimRaw.cognition : "",
+            behavior: typeof sixDimRaw.behavior === "string" ? sixDimRaw.behavior : "",
+            relation: typeof sixDimRaw.relation === "string" ? sixDimRaw.relation : "",
+            environment: typeof sixDimRaw.environment === "string" ? sixDimRaw.environment : ""
+          }
+        : null;
       const microTasks = Array.isArray(parsed.microTasks)
         ? parsed.microTasks.filter((x): x is string => typeof x === "string")
         : [];
 
-      if (tcmAdvice.length === 0 || westernAdvice.length === 0 || microTasks.length === 0) {
+      if (
+        !sixDimAdvice ||
+        !sixDimAdvice.body ||
+        !sixDimAdvice.emotion ||
+        !sixDimAdvice.cognition ||
+        !sixDimAdvice.behavior ||
+        !sixDimAdvice.relation ||
+        !sixDimAdvice.environment ||
+        microTasks.length === 0
+      ) {
         return this.fallback.generate(input);
       }
 
       return {
-        tcmAdvice,
-        westernAdvice,
+        sixDimAdvice,
         microTasks,
         riskNotice: typeof parsed.riskNotice === "string" ? parsed.riskNotice : undefined,
         tcmConfidence: clampConfidence((parsed as { tcmConfidence?: unknown }).tcmConfidence, 0.68),

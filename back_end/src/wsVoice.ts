@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import type { WebSocket } from "ws";
+import WebSocket, { RawData } from "ws";
+import { randomUUID } from "node:crypto";
 import { ServerMessage } from "./protocol";
 import { nowTs } from "./utils";
 
@@ -18,20 +19,259 @@ const send = <TPayload extends VoicePayload>(socket: WebSocket, type: string, pa
   socket.send(JSON.stringify(message));
 };
 
+const env = (name: string, fallback = ""): string => (process.env[name] || fallback).trim();
+
+const TTS_WS_URL = env("ALIYUN_TTS_WS_URL", "wss://nls-gateway-cn-shanghai.aliyuncs.com/ws/v1");
+const TTS_APP_KEY = env("ALIYUN_NLS_APP_KEY");
+const TTS_TOKEN = env("ALIYUN_NLS_TOKEN");
+const TTS_VOICE = env("ALIYUN_TTS_VOICE", "xiaoyun");
+const TTS_FORMAT = env("ALIYUN_TTS_FORMAT", "pcm");
+const TTS_SAMPLE_RATE = Number(env("ALIYUN_TTS_SAMPLE_RATE", "16000")) || 16000;
+const TTS_VOLUME = Number(env("ALIYUN_TTS_VOLUME", "50")) || 50;
+const TTS_SPEECH_RATE = Number(env("ALIYUN_TTS_SPEECH_RATE", "0")) || 0;
+const TTS_PITCH_RATE = Number(env("ALIYUN_TTS_PITCH_RATE", "0")) || 0;
+
+const hasAliyunTtsConfig = (): boolean => Boolean(TTS_APP_KEY && TTS_TOKEN);
+
+type TtsAction = "tts_speak" | "tts_start" | "tts_text" | "tts_stop";
+type TtsCommand = {
+  action: TtsAction;
+  requestId?: string;
+  text?: string;
+  voice?: string;
+  format?: string;
+  sampleRate?: number;
+};
+
+type UpstreamMessage = {
+  header?: {
+    name?: string;
+    status?: number;
+    task_id?: string;
+  };
+  payload?: {
+    message?: string;
+    index?: number;
+    text?: string;
+  };
+};
+
+class AliyunTtsSession {
+  private upstream: WebSocket | null = null;
+  private taskId = randomUUID();
+  private activeRequestId = "";
+
+  constructor(private readonly fastify: FastifyInstance, private readonly downstream: WebSocket) {}
+
+  private sendUpstreamFrame(name: "StartSynthesis" | "RunSynthesis" | "StopSynthesis", payload: Record<string, unknown>): void {
+    if (!this.upstream || this.upstream.readyState !== WebSocket.OPEN) return;
+    const frame = {
+      header: {
+        appkey: TTS_APP_KEY,
+        token: TTS_TOKEN,
+        message_id: randomUUID(),
+        task_id: this.taskId,
+        namespace: "FlowingSpeechSynthesizer",
+        name
+      },
+      payload
+    };
+    this.upstream.send(JSON.stringify(frame));
+  }
+
+  private bindUpstreamEvents(upstream: WebSocket): void {
+    upstream.on("message", (raw: RawData, isBinary: boolean) => {
+      if (this.downstream.readyState !== WebSocket.OPEN) return;
+      if (isBinary) {
+        this.downstream.send(raw, { binary: true });
+        return;
+      }
+
+      const text =
+        typeof raw === "string" ? raw : Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw ?? "");
+      let parsed: UpstreamMessage | null = null;
+      try {
+        parsed = JSON.parse(text) as UpstreamMessage;
+      } catch {
+        parsed = null;
+      }
+
+      const name = parsed?.header?.name || "";
+      if (name === "SynthesisStarted") {
+        send(this.downstream, "tts_started", { requestId: this.activeRequestId });
+        return;
+      }
+      if (name === "SentenceSynthesis") {
+        send(this.downstream, "tts_sentence", {
+          requestId: this.activeRequestId,
+          index: parsed?.payload?.index ?? null,
+          text: parsed?.payload?.text ?? ""
+        });
+        return;
+      }
+      if (name === "SynthesisCompleted") {
+        send(this.downstream, "tts_done", { requestId: this.activeRequestId });
+        return;
+      }
+      if (name === "TaskFailed") {
+        send(this.downstream, "tts_error", {
+          requestId: this.activeRequestId,
+          message: parsed?.payload?.message || "Aliyun TTS task failed"
+        });
+      }
+    });
+
+    upstream.on("error", (err) => {
+      this.fastify.log.error({ err }, "Aliyun TTS upstream error");
+      send(this.downstream, "tts_error", {
+        requestId: this.activeRequestId,
+        message: "Aliyun TTS upstream error"
+      });
+    });
+
+    upstream.on("close", () => {
+      this.upstream = null;
+    });
+  }
+
+  private async ensureUpstream(
+    requestId: string,
+    opts: { voice?: string; format?: string; sampleRate?: number }
+  ): Promise<void> {
+    if (this.upstream && this.upstream.readyState === WebSocket.OPEN) return;
+
+    this.taskId = randomUUID();
+    this.activeRequestId = requestId;
+    const upstream = new WebSocket(TTS_WS_URL);
+    this.upstream = upstream;
+    this.bindUpstreamEvents(upstream);
+
+    await new Promise<void>((resolve, reject) => {
+      const onOpen = (): void => {
+        upstream.off("error", onError);
+        resolve();
+      };
+      const onError = (err: Error): void => {
+        upstream.off("open", onOpen);
+        reject(err);
+      };
+      upstream.once("open", onOpen);
+      upstream.once("error", onError);
+    });
+
+    this.sendUpstreamFrame("StartSynthesis", {
+      voice: opts.voice || TTS_VOICE,
+      format: opts.format || TTS_FORMAT,
+      sample_rate: Number(opts.sampleRate) || TTS_SAMPLE_RATE,
+      volume: TTS_VOLUME,
+      speech_rate: TTS_SPEECH_RATE,
+      pitch_rate: TTS_PITCH_RATE
+    });
+  }
+
+  async handle(command: TtsCommand): Promise<void> {
+    if (!hasAliyunTtsConfig()) {
+      send(this.downstream, "tts_error", {
+        requestId: command.requestId || "",
+        message: "Aliyun TTS is not configured"
+      });
+      return;
+    }
+
+    const requestId = command.requestId || randomUUID();
+    this.activeRequestId = requestId;
+
+    if (command.action === "tts_start") {
+      await this.ensureUpstream(requestId, command);
+      return;
+    }
+
+    if (command.action === "tts_text") {
+      await this.ensureUpstream(requestId, command);
+      if ((command.text || "").trim()) {
+        this.sendUpstreamFrame("RunSynthesis", { text: command.text });
+      }
+      return;
+    }
+
+    if (command.action === "tts_stop") {
+      if (this.upstream && this.upstream.readyState === WebSocket.OPEN) {
+        this.sendUpstreamFrame("StopSynthesis", {});
+      }
+      return;
+    }
+
+    if (command.action === "tts_speak") {
+      await this.ensureUpstream(requestId, command);
+      if ((command.text || "").trim()) {
+        this.sendUpstreamFrame("RunSynthesis", { text: command.text });
+      }
+      this.sendUpstreamFrame("StopSynthesis", {});
+    }
+  }
+
+  close(): void {
+    if (this.upstream) {
+      try {
+        if (this.upstream.readyState === WebSocket.OPEN) {
+          this.sendUpstreamFrame("StopSynthesis", {});
+        }
+        this.upstream.close();
+      } catch {
+        // ignore
+      }
+      this.upstream = null;
+    }
+  }
+}
+
+const decodeTextMessage = (raw: RawData): string => {
+  if (typeof raw === "string") return raw;
+  if (Buffer.isBuffer(raw)) return raw.toString("utf8");
+  if (Array.isArray(raw)) return Buffer.concat(raw).toString("utf8");
+  if (raw instanceof ArrayBuffer) return Buffer.from(raw).toString("utf8");
+  return "";
+};
+
 export const registerVoiceWs = async (fastify: FastifyInstance): Promise<void> => {
   fastify.get("/voice", { websocket: true }, (socket) => {
     send(socket, "voice_ready", {
-      mode: "placeholder"
+      mode: hasAliyunTtsConfig() ? "aliyun_tts+placeholder_asr" : "placeholder"
     });
+    const ttsSession = new AliyunTtsSession(fastify, socket);
 
-    socket.on("message", () => {
-      // Placeholder path: acknowledge every packet and return a fake transcript.
-      send(socket, "voice_transcript", {
-        text: "\uff08\u8bed\u97f3\u8f6c\u6587\u672c\u5360\u4f4d\uff09\u6211\u73b0\u5728\u6709\u70b9\u7d2f\u3002"
-      });
-      send(socket, "suggested_preset", {
-        name: "tired"
-      });
+    socket.on("message", async (raw: RawData, isBinary: boolean) => {
+      if (isBinary) {
+        // Keep existing placeholder ASR path for microphone packets.
+        send(socket, "voice_transcript", {
+          text: "\uff08\u8bed\u97f3\u8f6c\u6587\u672c\u5360\u4f4d\uff09\u6211\u73b0\u5728\u6709\u70b9\u7d2f\u3002"
+        });
+        send(socket, "suggested_preset", {
+          name: "tired"
+        });
+        return;
+      }
+
+      const text = decodeTextMessage(raw);
+      if (!text.trim()) return;
+
+      let parsed: TtsCommand | null = null;
+      try {
+        parsed = JSON.parse(text) as TtsCommand;
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || !parsed.action || !String(parsed.action).startsWith("tts_")) return;
+
+      try {
+        await ttsSession.handle(parsed);
+      } catch (err) {
+        fastify.log.error({ err }, "Voice TTS command failed");
+        send(socket, "tts_error", {
+          requestId: parsed.requestId || "",
+          message: "Voice TTS command failed"
+        });
+      }
     });
 
     socket.on("error", (err: Error) => {
@@ -40,6 +280,10 @@ export const registerVoiceWs = async (fastify: FastifyInstance): Promise<void> =
         code: "INTERNAL",
         message: "Voice channel internal error"
       });
+    });
+
+    socket.on("close", () => {
+      ttsSession.close();
     });
   });
 };

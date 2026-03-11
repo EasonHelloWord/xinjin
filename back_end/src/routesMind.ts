@@ -5,7 +5,7 @@ import { authMiddleware } from "./authMiddleware";
 import { getDb } from "./db";
 import { badRequest, forbidden } from "./errors";
 import { getProviders } from "./providers/factory";
-import { AdviceConfidence, AssessmentSectionScores, UserLevel } from "./providers/types";
+import { AdviceConfidence, AssessmentSectionScores, SixDimAdvice, UserLevel } from "./providers/types";
 
 const assessmentSubmitSchema = z.object({
   answers: z.array(z.number().int().min(1).max(5)).length(20)
@@ -210,6 +210,25 @@ const parseJsonNumberArray = (raw: string): number[] => {
   }
 };
 
+const normalizeSixDimAdvice = (raw: Partial<SixDimAdvice> | null | undefined): SixDimAdvice => ({
+  body: typeof raw?.body === "string" ? raw.body : "",
+  emotion: typeof raw?.emotion === "string" ? raw.emotion : "",
+  cognition: typeof raw?.cognition === "string" ? raw.cognition : "",
+  behavior: typeof raw?.behavior === "string" ? raw.behavior : "",
+  relation: typeof raw?.relation === "string" ? raw.relation : "",
+  environment: typeof raw?.environment === "string" ? raw.environment : ""
+});
+
+const sixDimFromLegacyArrays = (left: string[], right: string[]): SixDimAdvice =>
+  normalizeSixDimAdvice({
+    body: left[0],
+    emotion: left[1],
+    cognition: left[2],
+    behavior: right[0],
+    relation: right[1],
+    environment: right[2]
+  });
+
 const parseSectionScores = (raw: string): AssessmentSectionScores | null => {
   try {
     const parsed = JSON.parse(raw) as Partial<AssessmentSectionScores>;
@@ -264,6 +283,16 @@ const toAssessmentResponse = (row: AssessmentRow) => ({
 });
 
 const toAnalysisResponse = (row: AnalysisRow) => ({
+  ...(() => {
+    const left = parseJsonStringArray(row.tcm_advice_json);
+    const right = parseJsonStringArray(row.western_advice_json);
+    const sixDimAdvice = sixDimFromLegacyArrays(left, right);
+    return {
+      tcmAdvice: left,
+      westernAdvice: right,
+      sixDimAdvice
+    };
+  })(),
   id: row.id,
   assessmentId: row.assessment_id,
   inputText: row.input_text,
@@ -274,8 +303,6 @@ const toAnalysisResponse = (row: AnalysisRow) => ({
   contradictions: parseJsonStringArray(row.contradictions_json),
   summary: row.summary,
   stateType: row.state_type,
-  tcmAdvice: parseJsonStringArray(row.tcm_advice_json),
-  westernAdvice: parseJsonStringArray(row.western_advice_json),
   microTasks: parseJsonStringArray(row.micro_tasks_json),
   confidence: parseConfidence(row.confidence_json),
   riskNotice: row.risk_notice,
@@ -428,8 +455,8 @@ export const registerMindRoutes = async (fastify: FastifyInstance): Promise<void
         JSON.stringify(analyzeOut.contradictions),
         finalSummary,
         finalStateType,
-        JSON.stringify(planOut.tcmAdvice),
-        JSON.stringify(planOut.westernAdvice),
+        JSON.stringify([planOut.sixDimAdvice.body, planOut.sixDimAdvice.emotion, planOut.sixDimAdvice.cognition]),
+        JSON.stringify([planOut.sixDimAdvice.behavior, planOut.sixDimAdvice.relation, planOut.sixDimAdvice.environment]),
         JSON.stringify(planOut.microTasks),
         JSON.stringify(confidence),
         safety.riskNotice ?? planOut.riskNotice ?? null,
@@ -445,6 +472,8 @@ export const registerMindRoutes = async (fastify: FastifyInstance): Promise<void
         summary: finalSummary,
         stateType: finalStateType,
         ...planOut,
+        tcmAdvice: [planOut.sixDimAdvice.body, planOut.sixDimAdvice.emotion, planOut.sixDimAdvice.cognition],
+        westernAdvice: [planOut.sixDimAdvice.behavior, planOut.sixDimAdvice.relation, planOut.sixDimAdvice.environment],
         confidence,
         riskNotice: safety.riskNotice ?? planOut.riskNotice,
         createdAt

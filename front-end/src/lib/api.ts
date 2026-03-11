@@ -159,6 +159,14 @@ export interface AnalysisResult {
   contradictions: string[];
   summary: string;
   stateType: StateType;
+  sixDimAdvice: {
+    body: string;
+    emotion: string;
+    cognition: string;
+    behavior: string;
+    relation: string;
+    environment: string;
+  };
   tcmAdvice: string[];
   westernAdvice: string[];
   microTasks: string[];

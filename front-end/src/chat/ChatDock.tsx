@@ -4,6 +4,7 @@ import { api, ChatMessage } from "../lib/api";
 import { clearAuthToken } from "../lib/auth";
 import { emitPulse } from "../lib/pulseBus";
 import { voiceInput, VoiceStatus } from "../input/voiceInput";
+import { voiceTts } from "../input/voiceTts";
 
 type ChatMode = "text" | "voice";
 
@@ -103,6 +104,7 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
   }, []);
 
   const stopSpeech = (): void => {
+    voiceTts.stop();
     if (currentSpeechTimerRef.current !== null) {
       window.clearInterval(currentSpeechTimerRef.current);
       currentSpeechTimerRef.current = null;
@@ -183,25 +185,27 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
   }, [mode]);
 
   const speakWithPulse = (text: string): void => {
-    if (!voiceEnabled || !("speechSynthesis" in window)) return;
+    if (!voiceEnabled) return;
     stopSpeech();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.onstart = () => {
-      emitPulse(0.4);
-      currentSpeechTimerRef.current = window.setInterval(() => emitPulse(0.15 + Math.random() * 0.2), 80);
-    };
-    utterance.onboundary = () => emitPulse(0.25);
-    const finish = (): void => {
-      if (currentSpeechTimerRef.current !== null) {
-        window.clearInterval(currentSpeechTimerRef.current);
-        currentSpeechTimerRef.current = null;
-      }
-    };
-    utterance.onend = finish;
-    utterance.onerror = finish;
-    window.speechSynthesis.speak(utterance);
+    emitPulse(0.4);
+    currentSpeechTimerRef.current = window.setInterval(() => emitPulse(0.15 + Math.random() * 0.2), 80);
+    void voiceTts
+      .speak(text)
+      .catch(() => {
+        // fallback to browser synthesis when backend TTS is unavailable.
+        if (!("speechSynthesis" in window)) return;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1;
+        utterance.pitch = 1;
+        utterance.onboundary = () => emitPulse(0.25);
+        window.speechSynthesis.speak(utterance);
+      })
+      .finally(() => {
+        if (currentSpeechTimerRef.current !== null) {
+          window.clearInterval(currentSpeechTimerRef.current);
+          currentSpeechTimerRef.current = null;
+        }
+      });
   };
 
   const sendMessage = async (rawText: string): Promise<void> => {
