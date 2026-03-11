@@ -17,6 +17,7 @@ interface ChatDockProps {
 }
 
 const makeId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const ENABLE_BROWSER_TTS_FALLBACK = String(import.meta.env.VITE_ENABLE_BROWSER_TTS_FALLBACK || "").toLowerCase() === "true";
 
 const findRecoveredAssistant = (
   history: ChatMessage[],
@@ -191,14 +192,16 @@ export function ChatDock({ onLogout, chatEnabled, onRequestReassess, assessmentL
     currentSpeechTimerRef.current = window.setInterval(() => emitPulse(0.15 + Math.random() * 0.2), 80);
     void voiceTts
       .speak(text)
-      .catch(() => {
-        // fallback to browser synthesis when backend TTS is unavailable.
-        if (!("speechSynthesis" in window)) return;
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1;
-        utterance.pitch = 1;
-        utterance.onboundary = () => emitPulse(0.25);
-        window.speechSynthesis.speak(utterance);
+      .catch((err) => {
+        if (ENABLE_BROWSER_TTS_FALLBACK && "speechSynthesis" in window) {
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.rate = 1;
+          utterance.pitch = 1;
+          utterance.onboundary = () => emitPulse(0.25);
+          window.speechSynthesis.speak(utterance);
+          return;
+        }
+        setError((err as Error).message || "云端语音播报失败（未启用浏览器回退）");
       })
       .finally(() => {
         if (currentSpeechTimerRef.current !== null) {

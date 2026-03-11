@@ -21,7 +21,7 @@ const send = <TPayload extends VoicePayload>(socket: WebSocket, type: string, pa
 
 const env = (name: string, fallback = ""): string => (process.env[name] || fallback).trim();
 
-const TTS_WS_URL = env("ALIYUN_TTS_WS_URL", "wss://nls-gateway-cn-shanghai.aliyuncs.com/ws/v1");
+const TTS_WS_URL = env("ALIYUN_TTS_WS_URL", "wss://nls-gateway.cn-shanghai.aliyuncs.com/ws/v1");
 const TTS_APP_KEY = env("ALIYUN_NLS_APP_KEY");
 const TTS_TOKEN = env("ALIYUN_NLS_TOKEN");
 const TTS_VOICE = env("ALIYUN_TTS_VOICE", "xiaoyun");
@@ -142,7 +142,14 @@ class AliyunTtsSession {
 
     this.taskId = randomUUID();
     this.activeRequestId = requestId;
-    const upstream = new WebSocket(TTS_WS_URL);
+    const joinTokenToUrl = (base: string, token: string): string => {
+      if (!token) return base;
+      if (base.includes("token=")) return base;
+      const sep = base.includes("?") ? "&" : "?";
+      return `${base}${sep}token=${encodeURIComponent(token)}`;
+    };
+    const upstreamUrl = joinTokenToUrl(TTS_WS_URL, TTS_TOKEN);
+    const upstream = new WebSocket(upstreamUrl);
     this.upstream = upstream;
     this.bindUpstreamEvents(upstream);
 
