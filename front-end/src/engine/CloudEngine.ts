@@ -50,6 +50,7 @@ export class CloudEngine {
   private pulseEnergy = 0;
   private rippleWaves: RippleWave[] = [];
   private offPulse: (() => void) | null = null;
+  private lastRippleAtSec = -10;
 
   constructor(container: HTMLElement, controller: CloudController, callbacks: EngineCallbacks = {}) {
     this.container = container;
@@ -83,11 +84,18 @@ export class CloudEngine {
 
     this.offPulse = onPulse((v) => {
       const strength = clamp(v, 0, 1);
-      this.pulseEnergy = Math.min(1, this.pulseEnergy + Math.max(0.03, strength * 0.9));
-      this.rippleWaves.push({
-        startSec: (performance.now() - this.startedAt) / 1000,
-        strength: Math.max(0.22, strength)
-      });
+      const nowSec = (performance.now() - this.startedAt) / 1000;
+      this.pulseEnergy = Math.min(1, this.pulseEnergy + Math.max(0.015, strength * 0.55));
+
+      // Throttle ring creation to avoid dense "strobe" ripples.
+      if (strength >= 0.12 && nowSec - this.lastRippleAtSec >= 0.2) {
+        this.lastRippleAtSec = nowSec;
+        this.rippleWaves.push({
+          startSec: nowSec,
+          strength: Math.max(0.18, strength * 0.85)
+        });
+      }
+
       if (this.rippleWaves.length > 12) {
         this.rippleWaves = this.rippleWaves.slice(-12);
       }
@@ -113,7 +121,7 @@ export class CloudEngine {
 
     this.updateInteraction(delta, snapshot);
     this.breathPhase += delta * 2 * Math.PI * (snapshot.visual.breathHz + snapshot.visual.breathJitter * 0.2);
-    this.pulseEnergy *= 0.9;
+    this.pulseEnergy *= 0.95;
     this.drawFrame(elapsed, snapshot);
 
     this.applyFpsMetric(delta);
@@ -362,7 +370,7 @@ export class CloudEngine {
     timeSec: number,
     colorA: { r: number; g: number; b: number }
   ): void {
-    const lifeSec = 1.15;
+    const lifeSec = 1.8;
     this.rippleWaves = this.rippleWaves.filter((wave) => timeSec - wave.startSec <= lifeSec);
     if (!this.rippleWaves.length) return;
 
@@ -370,14 +378,14 @@ export class CloudEngine {
       const wave = this.rippleWaves[i];
       const age = clamp((timeSec - wave.startSec) / lifeSec, 0, 1);
       const eased = age * age * (3 - 2 * age);
-      const ringRadius = radius * (1.06 + eased * 1.65);
-      const alpha = (1 - age) * (1 - age) * (0.2 + wave.strength * 0.35) * (0.75 + this.pulseEnergy * 0.4);
+      const ringRadius = radius * (1.04 + eased * 1.2);
+      const alpha = (1 - age) * (1 - age) * (0.12 + wave.strength * 0.24) * (0.72 + this.pulseEnergy * 0.25);
       if (alpha <= 0.006) continue;
 
       ctx.beginPath();
       ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2);
       ctx.strokeStyle = this.toRgba(colorA, alpha);
-      ctx.lineWidth = Math.max(1, radius * (0.004 + (1 - age) * 0.0045));
+      ctx.lineWidth = Math.max(1, radius * (0.003 + (1 - age) * 0.0038));
       ctx.stroke();
     }
   }

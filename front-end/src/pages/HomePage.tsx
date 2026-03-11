@@ -112,6 +112,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
   const [adviceUpdating, setAdviceUpdating] = useState(false);
   const [flowError, setFlowError] = useState<string | null>(null);
   const pulseEnergyRef = useRef(0);
+  const pulseTargetRef = useRef(0);
   const pulseRafRef = useRef<number | null>(null);
   const adviceReqSeqRef = useRef(0);
   const recentUserTextsRef = useRef<string[]>([]);
@@ -156,14 +157,15 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
 
   useEffect(() => {
     const offPulse = onPulse((v) => {
-      pulseEnergyRef.current = Math.min(1, pulseEnergyRef.current + Math.max(0.06, v));
+      pulseTargetRef.current = Math.min(1, pulseTargetRef.current + Math.max(0.02, v * 0.6));
     });
 
     let stopped = false;
     const tick = (): void => {
       if (stopped) return;
-      pulseEnergyRef.current *= 0.86;
-      const scale = 1 + pulseEnergyRef.current * 0.24;
+      pulseEnergyRef.current += (pulseTargetRef.current - pulseEnergyRef.current) * 0.12;
+      pulseTargetRef.current *= 0.94;
+      const scale = 1 + pulseEnergyRef.current * 0.16;
       controller.applyConfig("cloud.sphereRadius", scale);
       pulseRafRef.current = requestAnimationFrame(tick);
     };
