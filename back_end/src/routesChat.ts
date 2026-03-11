@@ -95,12 +95,6 @@ const getOrCreateSingleSession = async (userId: string, title?: string): Promise
   const existing = sessions[0];
 
   if (existing) {
-    if (sessions.length > 1) {
-      for (const stale of sessions.slice(1)) {
-        await db.run("DELETE FROM sessions WHERE id = ?", stale.id);
-      }
-    }
-
     if (title && title.trim() && title.trim() !== existing.title) {
       const nextTitle = title.trim();
       await db.run("UPDATE sessions SET title = ? WHERE id = ?", nextTitle, existing.id);
