@@ -20,6 +20,7 @@ const send = <TPayload extends VoicePayload>(socket: WebSocket, type: string, pa
 };
 
 const env = (name: string, fallback = ""): string => (process.env[name] || fallback).trim();
+const makeAliyunId = (): string => randomUUID().replace(/-/g, "");
 
 const TTS_WS_URL = env("ALIYUN_TTS_WS_URL", "wss://nls-gateway.cn-shanghai.aliyuncs.com/ws/v1");
 const TTS_APP_KEY = env("ALIYUN_NLS_APP_KEY");
@@ -62,7 +63,7 @@ type UpstreamMessage = {
 
 class AliyunTtsSession {
   private upstream: WebSocket | null = null;
-  private taskId = randomUUID();
+  private taskId = makeAliyunId();
   private activeRequestId = "";
   private started = false;
   private startWaiter: {
@@ -79,7 +80,7 @@ class AliyunTtsSession {
       header: {
         appkey: TTS_APP_KEY,
         token: TTS_TOKEN,
-        message_id: randomUUID(),
+        message_id: makeAliyunId(),
         task_id: this.taskId,
         namespace: "FlowingSpeechSynthesizer",
         name
@@ -174,7 +175,7 @@ class AliyunTtsSession {
   ): Promise<void> {
     if (this.upstream && this.upstream.readyState === WebSocket.OPEN && this.started) return;
 
-    this.taskId = randomUUID();
+    this.taskId = makeAliyunId();
     this.activeRequestId = requestId;
     this.started = false;
     const joinTokenToUrl = (base: string, token: string): string => {
