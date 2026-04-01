@@ -1,7 +1,10 @@
 node_modules
 dist
+.env
+.env.local
 env.sh
 .DS_Store
 *.log
 env.zsh
 *.tsbuildinfo
+./data

@@ -1,5 +1,6 @@
 import { MockEmotionAnalyzer, MockPlanGenerator } from "./mockProvider";
-import { deepSeekChat } from "./deepseekClient";
+import { llmChat } from "./llmClient";
+import { listMcpTools, callMcpTool } from "../mcp/mcpClient";
 import { AnalyzeInput, AnalyzeOutput, EmotionAnalyzer, PlanGenerator, PlanInput, PlanOutput } from "./types";
 
 const stripFence = (text: string): string => text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
@@ -27,27 +28,27 @@ const clampConfidence = (value: unknown, fallback: number): number => {
   return Math.max(0, Math.min(1, value));
 };
 
-export class DeepSeekEmotionAnalyzer implements EmotionAnalyzer {
+export class LlmEmotionAnalyzer implements EmotionAnalyzer {
   private readonly fallback = new MockEmotionAnalyzer();
 
   async analyze(input: AnalyzeInput): Promise<AnalyzeOutput> {
     try {
-      const content = await deepSeekChat([
-        {
-          role: "system",
-          content:
-            "你是心理状态结构化分析器。遵循安全优先：对强烈负面情绪、风险表达、短时情绪反转保持敏感，不要轻率归为正常。请只输出 JSON，不要解释。字段：emotionTags(string[]), contradictions(string[]), summary(string), stateType(必须是 sensory_overload|emotional_block|mixed_fluctuation), stateConfidence(number,0-1)"
-        },
-        {
-          role: "user",
-          content: JSON.stringify(input)
-        }
-      ]);
+      const tools = await listMcpTools();
+      const content = await llmChat(
+        [
+          {
+            role: "system",
+            content:
+              "你是心理状态结构化分析器。遵循安全优先：对强烈负面情绪、风险表达、短时情绪反转保持敏感，不要轻率归为正常。请只输出 JSON，不要解释。字段：emotionTags(string[]), contradictions(string[]), summary(string), stateType(必须是 sensory_overload|emotional_block|mixed_fluctuation), stateConfidence(number,0-1)"
+          },
+          { role: "user", content: JSON.stringify(input) }
+        ],
+        tools,
+        callMcpTool
+      );
 
       const parsed = parseJsonObject<Partial<AnalyzeOutput>>(content);
-      if (!parsed) {
-        return this.fallback.analyze(input);
-      }
+      if (!parsed) return this.fallback.analyze(input);
 
       const stateType =
         parsed.stateType === "sensory_overload" ||
@@ -75,25 +76,28 @@ export class DeepSeekEmotionAnalyzer implements EmotionAnalyzer {
   }
 }
 
-export class DeepSeekPlanGenerator implements PlanGenerator {
+export class LlmPlanGenerator implements PlanGenerator {
   private readonly fallback = new MockPlanGenerator();
 
   async generate(input: PlanInput): Promise<PlanOutput> {
     try {
-      const content = await deepSeekChat([
-        {
-          role: "system",
-          content:
-            "你是心理调理建议生成器，使用多元化六维调整模式。遵循心理安全优先：当存在明显高风险或剧烈波动时，先给安全与转介建议，再给日常建议。每个维度建议写成1-2句、60字左右，语气温和有行动感，可加入1个贴切emoji。建议必须是可执行动作句，禁止解释原因、禁止展示推理过程。请只输出 JSON。字段：sixDimAdvice(object，含 body/emotion/cognition/behavior/relation/environment 六个 string 字段), microTasks(string[]), riskNotice(string,可空), tcmConfidence(number,0-1), westernConfidence(number,0-1)。"
-        },
-        {
-          role: "user",
-          content: JSON.stringify(input)
-        }
-      ]);
+      const tools = await listMcpTools();
+      const content = await llmChat(
+        [
+          {
+            role: "system",
+            content:
+              "你是心理调理建议生成器，使用多元化六维调整模式。遵循心理安全优先：当存在明显高风险或剧烈波动时，先给安全与转介建议，再给日常建议。每个维度建议写成1-2句、60字左右，语气温和有行动感，可加入1个贴切emoji。建议必须是可执行动作句，禁止解释原因、禁止展示推理过程。请只输出 JSON。字段：sixDimAdvice(object，含 body/emotion/cognition/behavior/relation/environment 六个 string 字段), microTasks(string[]), riskNotice(string,可空), tcmConfidence(number,0-1), westernConfidence(number,0-1)。"
+          },
+          { role: "user", content: JSON.stringify(input) }
+        ],
+        tools,
+        callMcpTool
+      );
 
       const parsed = parseJsonObject<Partial<PlanOutput>>(content);
       if (!parsed) return this.fallback.generate(input);
+
       const sixDimRaw = parsed.sixDimAdvice as Partial<PlanOutput["sixDimAdvice"]> | undefined;
       const sixDimAdvice = sixDimRaw
         ? {

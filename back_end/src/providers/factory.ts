@@ -1,5 +1,5 @@
-import { hasDeepSeekConfig } from "./deepseekClient";
-import { DeepSeekEmotionAnalyzer, DeepSeekPlanGenerator } from "./deepseekProvider";
+import { hasLlmConfig } from "./llmClient";
+import { LlmEmotionAnalyzer, LlmPlanGenerator } from "./llmProvider";
 import { MockEmotionAnalyzer, MockPlanGenerator } from "./mockProvider";
 import { EmotionAnalyzer, PlanGenerator } from "./types";
 
@@ -10,15 +10,11 @@ type ProviderBundle = {
 };
 
 export const getProviders = (): ProviderBundle => {
-  const preferred = (process.env.AI_PROVIDER || "").trim().toLowerCase();
-  const canUseDeepSeek = hasDeepSeekConfig();
-  const useDeepSeek = preferred === "deepseek" || (!preferred && canUseDeepSeek);
-
-  if (useDeepSeek && canUseDeepSeek) {
+  if (hasLlmConfig()) {
     return {
-      emotionAnalyzer: new DeepSeekEmotionAnalyzer(),
-      planGenerator: new DeepSeekPlanGenerator(),
-      providerName: "deepseek"
+      emotionAnalyzer: new LlmEmotionAnalyzer(),
+      planGenerator: new LlmPlanGenerator(),
+      providerName: "llm"
     };
   }
 

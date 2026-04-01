@@ -24,10 +24,29 @@ npm run start
 ## Environment
 
 - `JWT_SECRET` (optional): JWT signing secret. Default is `dev-secret-change-me`.
-- `AI_PROVIDER` (optional): set to `deepseek` to force DeepSeek provider.
-- `DEEPSEEK_API_KEY` (optional): when present, LLM calls use DeepSeek (`https://api.deepseek.com`).
-- `DEEPSEEK_BASE_URL` (optional): defaults to `https://api.deepseek.com`.
-- `DEEPSEEK_MODEL` (optional): defaults to `deepseek-chat`.
+- `LLM_API_KEY` (optional): when present, backend uses the configured LLM instead of mock replies.
+- `LLM_BASE_URL` (optional): defaults to `https://api.deepseek.com`.
+- `LLM_MODEL` (optional): defaults to `deepseek-chat`.
+- `MCP_SERVER_CMD` (optional): command used to start the local MCP server over stdio.
+- `MCP_SERVER_CWD` (optional): working directory for `MCP_SERVER_CMD`. Use this if the MCP command contains relative paths.
+- `XINJIN_CONFIG_FILE` (optional): extra config file path. Supports `.env`-style files and `.json`.
+
+Default config loading order:
+
+1. `back_end/.env`
+2. `back_end/.env.local`
+3. `XINJIN_CONFIG_FILE` if set
+4. Shell environment variables override all file-based values
+
+Example `.env`:
+
+```env
+LLM_API_KEY=your-llm-api-key
+LLM_BASE_URL=https://api.deepseek.com
+LLM_MODEL=deepseek-chat
+MCP_SERVER_CMD=node dist/index.js
+MCP_SERVER_CWD=../mcp_server
+```
 
 ## Storage
 

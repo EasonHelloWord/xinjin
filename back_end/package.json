@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "description": "Minimal websocket backend for xinjin front-end",
-  "main": "dist/index.js",
+  "main": "dist/main.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/main.js"
   },
   "engines": {
     "node": ">=18"
@@ -15,7 +15,9 @@
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@fastify/websocket": "^11.2.0",
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "bcrypt": "^6.0.0",
+    "dotenv": "^17.3.1",
     "fastify": "^5.3.0",
     "jsonwebtoken": "^9.0.3",
     "openai": "^6.27.0",
