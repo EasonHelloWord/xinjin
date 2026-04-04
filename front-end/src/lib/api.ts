@@ -14,14 +14,8 @@ const resolveApiBases = (): string[] => {
   const envBase = trim(import.meta.env.VITE_API_BASE);
   if (envBase) set.add(envBase);
 
-  set.add("http://xinjin.easonjan.top:8787");
-  set.add("http://81.69.228.248:8787");
-  const host = typeof window !== "undefined" ? window.location.hostname : "";
-  const isLocalHost = host === "localhost" || host === "127.0.0.1";
-  if (isLocalHost) {
-    set.add("http://127.0.0.1:8787");
-    set.add("http://localhost:8787");
-  }
+  set.add("http://127.0.0.1:8787");
+  set.add("http://localhost:8787");
   return Array.from(set);
 };
 
@@ -183,6 +177,59 @@ export interface ProfileSummary {
 export interface ProfileTimeline {
   assessments: Array<AssessmentResult & { answers: number[] }>;
   analyses: Array<AnalysisResult & { inputText: string }>;
+}
+
+export interface LandingValueCard {
+  icon: string;
+  title: string;
+  body: string;
+}
+
+export interface LandingContentCard {
+  tag: string;
+  title: string;
+  body: string;
+}
+
+export interface LandingSceneCard {
+  eyebrow: string;
+  title: string;
+  body: string;
+}
+
+export interface LandingFooterColumn {
+  title: string;
+  lines: string[];
+}
+
+export interface LandingContent {
+  brandCN: string;
+  brandEN: string;
+  navItems: string[];
+  heroTitle: string;
+  heroSubtitle: string;
+  heroPrimaryCta: string;
+  heroSecondaryCta: string;
+  trustStats: Array<{ value: string; label: string }>;
+  kvTags: string[];
+  valueTitle: string;
+  valueSubtitle: string;
+  valueCards: LandingValueCard[];
+  contentTitle: string;
+  contentSubtitle: string;
+  featuredContent: LandingContentCard;
+  secondaryContents: LandingContentCard[];
+  sceneTitle: string;
+  sceneSubtitle: string;
+  sceneCards: LandingSceneCard[];
+  aboutTitle: string;
+  aboutSubtitle: string;
+  aboutParagraphs: string[];
+  aboutPillars: string[];
+  brandMotto: string;
+  footerColumns: LandingFooterColumn[];
+  footerCopyright: string;
+  footerTagline: string;
 }
 
 type SSEHandlers = {
@@ -439,5 +486,10 @@ export const api = {
 
   getProfileSummary: (): Promise<ProfileSummary> => request<ProfileSummary>("/api/profile/summary"),
 
-  getProfileTimeline: (): Promise<ProfileTimeline> => request<ProfileTimeline>("/api/profile/timeline")
+  getProfileTimeline: (): Promise<ProfileTimeline> => request<ProfileTimeline>("/api/profile/timeline"),
+
+  getLandingContent: (): Promise<LandingContent> =>
+    request<LandingContent>("/api/landing/content", {
+      skipAuth: true
+    })
 };

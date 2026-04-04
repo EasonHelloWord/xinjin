@@ -1,4 +1,5 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { setAuthToken } from "../lib/auth";
 
@@ -9,11 +10,18 @@ interface LoginPageProps {
 type AuthMode = "login" | "register";
 
 export function LoginPage({ onAuthenticated }: LoginPageProps): JSX.Element {
-  const [mode, setMode] = useState<AuthMode>("login");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialMode = searchParams.get("mode") === "register" ? "register" : "login";
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nextMode = searchParams.get("mode") === "register" ? "register" : "login";
+    setMode(nextMode);
+  }, [searchParams]);
 
   const onSubmit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
@@ -65,7 +73,11 @@ export function LoginPage({ onAuthenticated }: LoginPageProps): JSX.Element {
         <button
           type="button"
           className="auth-switch"
-          onClick={() => setMode((prev) => (prev === "login" ? "register" : "login"))}
+          onClick={() => {
+            const nextMode = mode === "login" ? "register" : "login";
+            setMode(nextMode);
+            setSearchParams({ mode: nextMode });
+          }}
           disabled={loading}
         >
           {mode === "login" ? "还没有账号？去注册" : "已有账号？去登录"}

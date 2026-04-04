@@ -3,13 +3,13 @@ const resolveWsBase = (): { wsUrl: string; voiceStreamUrl: string } => {
   const envVoice = (import.meta.env.VITE_VOICE_WS_URL as string | undefined)?.trim();
   if (envWs || envVoice) {
     return {
-      wsUrl: envWs || "ws://81.69.228.248:8787",
-      voiceStreamUrl: envVoice || `${envWs || "ws://81.69.228.248:8787"}/voice`
+      wsUrl: envWs || "ws://127.0.0.1:8787",
+      voiceStreamUrl: envVoice || `${envWs || "ws://127.0.0.1:8787"}/voice`
     };
   }
 
   if (typeof window !== "undefined") {
-    const host = window.location.hostname || "81.69.228.248";
+    const host = window.location.hostname || "127.0.0.1";
     const scheme = window.location.protocol === "https:" ? "wss" : "ws";
     return {
       wsUrl: `${scheme}://${host}:8787`,
@@ -18,8 +18,8 @@ const resolveWsBase = (): { wsUrl: string; voiceStreamUrl: string } => {
   }
 
   return {
-    wsUrl: "ws://81.69.228.248:8787",
-    voiceStreamUrl: "ws://81.69.228.248:8787/voice"
+    wsUrl: "ws://127.0.0.1:8787",
+    voiceStreamUrl: "ws://127.0.0.1:8787/voice"
   };
 };
 
