@@ -1,9 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatDock } from "../chat/ChatDock";
-import { CloudController } from "../engine/CloudController";
-import { CloudEngine } from "../engine/CloudEngine";
 import { AnalysisResult, api, AssessmentResult, StateType, UserLevel } from "../lib/api";
-import { emitPulse, onPulse } from "../lib/pulseBus";
 
 interface HomePageProps {
   onLogout: () => void;
@@ -87,18 +84,6 @@ const resolveSixDimAdvice = (analysisResult: AnalysisResult) => {
   };
 };
 
-const DIMENSION_LEFT = [
-  { key: "body", title: "身体调理", emoji: "🫁" },
-  { key: "emotion", title: "情绪调理", emoji: "💛" },
-  { key: "cognition", title: "认知调理", emoji: "🧠" }
-] as const;
-
-const DIMENSION_RIGHT = [
-  { key: "behavior", title: "行为调理", emoji: "🚶" },
-  { key: "relation", title: "关系调理", emoji: "🤝" },
-  { key: "environment", title: "环境调理", emoji: "🌿" }
-] as const;
-
 const dailyTaskKey = (): string => {
   const now = new Date();
   const y = now.getFullYear();
@@ -132,8 +117,6 @@ const applyDailyStableMicroTasks = (analysis: AnalysisResult): AnalysisResult =>
 };
 
 export function HomePage({ onLogout }: HomePageProps): JSX.Element {
-  const canvasRef = useRef<HTMLDivElement | null>(null);
-  const controller = useMemo(() => new CloudController(), []);
   const [initLoading, setInitLoading] = useState(true);
   const [stage, setStage] = useState<WorkflowStage>("assessment");
   const [assessmentAnswers, setAssessmentAnswers] = useState<number[]>(() => ASSESSMENT_QUESTIONS.map(() => 3));
@@ -143,20 +126,9 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
   const [assessmentLoading, setAssessmentLoading] = useState(false);
   const [adviceUpdating, setAdviceUpdating] = useState(false);
   const [flowError, setFlowError] = useState<string | null>(null);
-  const pulseEnergyRef = useRef(0);
-  const pulseTargetRef = useRef(0);
-  const pulseRafRef = useRef<number | null>(null);
   const adviceReqSeqRef = useRef(0);
   const recentUserTextsRef = useRef<string[]>([]);
   const sixDimAdvice = analysisResult ? resolveSixDimAdvice(analysisResult) : null;
-  useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-
-    const engine = new CloudEngine(el, controller);
-    engine.init();
-    return () => engine.dispose();
-  }, [controller]);
 
   useEffect(() => {
     const restoreLatest = async (): Promise<void> => {
@@ -182,36 +154,6 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
     };
     void restoreLatest();
   }, []);
-
-  useEffect(() => {
-    controller.setStageCenterYOffset(-0.08);
-  }, [controller]);
-
-  useEffect(() => {
-    const offPulse = onPulse((v) => {
-      pulseTargetRef.current = Math.min(1, pulseTargetRef.current + Math.max(0.02, v * 0.6));
-    });
-
-    let stopped = false;
-    const tick = (): void => {
-      if (stopped) return;
-      pulseEnergyRef.current += (pulseTargetRef.current - pulseEnergyRef.current) * 0.12;
-      pulseTargetRef.current *= 0.94;
-      const scale = 1 + pulseEnergyRef.current * 0.16;
-      controller.applyConfig("cloud.sphereRadius", scale);
-      pulseRafRef.current = requestAnimationFrame(tick);
-    };
-    pulseRafRef.current = requestAnimationFrame(tick);
-
-    return () => {
-      stopped = true;
-      offPulse();
-      if (pulseRafRef.current !== null) {
-        cancelAnimationFrame(pulseRafRef.current);
-      }
-      controller.applyConfig("cloud.sphereRadius", 1);
-    };
-  }, [controller]);
 
   const submitAssessment = async (): Promise<void> => {
     if (assessmentLoading) return;
@@ -239,7 +181,6 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
       });
       setAnalysisResult(applyDailyStableMicroTasks(analysis));
       setStage("result");
-      emitPulse(0.55);
     } catch (err) {
       setFlowError((err as Error).message);
     } finally {
@@ -255,7 +196,6 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
     setAssessmentAnswers(ASSESSMENT_QUESTIONS.map(() => 3));
     setDisplayQuestions(shuffleQuestions(ASSESSMENT_QUESTIONS));
     recentUserTextsRef.current = [];
-    emitPulse(0.2);
   };
 
   const refreshAdviceFromChat = async (payload: { userText: string }): Promise<void> => {
@@ -286,44 +226,6 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
 
   return (
     <div className="home-layout">
-      <div className={`cloud-stage ${stage === "assessment" || initLoading ? "hidden" : ""}`} ref={canvasRef} />
-
-      {stage === "result" && analysisResult && (
-        <>
-          <div className="state-hint-box">
-            <div className="state-hint-title">{"🧭 状态提示"}</div>
-            <div className="state-hint-text">{`${stateTypeLabel(analysisResult.stateType)} ｜ ${levelLabel(analysisResult.level)}`}</div>
-            {adviceUpdating && <div className="state-hint-sub">{"正在根据最新聊天更新建议..."}</div>}
-            {analysisResult.riskNotice && <div className="state-hint-risk">{`⚠️ ${analysisResult.riskNotice}`}</div>}
-          </div>
-
-          <aside className="mind-side mind-side-left">
-            <h3>{"六维调理"}</h3>
-            {DIMENSION_LEFT.map((item) => (
-              <article key={item.key} className="advice-block">
-                <div className="advice-title">{`${item.emoji} ${item.title}`}</div>
-                <div className="advice-body">{sixDimAdvice?.[item.key] ?? ""}</div>
-              </article>
-            ))}
-          </aside>
-          <aside className="mind-side mind-side-right">
-            <h3>{"六维调理"}</h3>
-            {DIMENSION_RIGHT.map((item) => (
-              <article key={item.key} className="advice-block">
-                <div className="advice-title">{`${item.emoji} ${item.title}`}</div>
-                <div className="advice-body">{sixDimAdvice?.[item.key] ?? ""}</div>
-              </article>
-            ))}
-            <div className="advice-title">{"✨ 今日微任务"}</div>
-            <div className="task-list">
-              {analysisResult.microTasks.map((item, idx) => (
-                <span key={item}>{`${idx + 1}. ${item}`}</span>
-              ))}
-            </div>
-          </aside>
-        </>
-      )}
-
       {initLoading && (
         <div className="assessment-screen">
           <div className="assessment-inner assessment-loading">
@@ -375,7 +277,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
         </div>
       )}
 
-      {stage === "result" && (
+      {stage === "result" && analysisResult && (
         <ChatDock
           onLogout={onLogout}
           chatEnabled={true}
@@ -390,6 +292,15 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
                 }`
               : ""
           }
+          analysisSummary={{
+            stateTypeLabel: stateTypeLabel(analysisResult.stateType),
+            levelLabel: levelLabel(analysisResult.level),
+            emotionTags: analysisResult.emotionTags,
+            riskNotice: analysisResult.riskNotice ?? null,
+            microTasks: analysisResult.microTasks,
+            adviceUpdating,
+            sixDimAdvice
+          }}
         />
       )}
     </div>

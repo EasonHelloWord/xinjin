@@ -21,7 +21,7 @@
   color: var(--mira-text);
 }
 
-main {
+.mira-home main {
   width: min(1200px, calc(100% - 48px));
   margin: 0 auto;
   padding-top: 132px;
@@ -152,10 +152,18 @@ main {
 
 .hero-title {
   margin: 0;
-  font-size: clamp(40px, 4.8vw, 72px);
+  font-size: clamp(34px, 4vw, 58px);
   letter-spacing: 0.02em;
   color: #304046;
   line-height: 1.12;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0;
+}
+
+.hero-title-segment {
+  white-space: nowrap;
 }
 
 .hero-subtitle {

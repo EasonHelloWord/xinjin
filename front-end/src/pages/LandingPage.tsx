@@ -1,12 +1,64 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, LandingContent } from "../lib/api";
 import "../landing.css";
 
 interface LandingPageProps {
   isAuthenticated: boolean;
   onLogout: () => void;
 }
+
+type LandingValueCard = {
+  icon: string;
+  title: string;
+  body: string;
+};
+
+type LandingContentCard = {
+  tag: string;
+  title: string;
+  body: string;
+};
+
+type LandingSceneCard = {
+  eyebrow: string;
+  title: string;
+  body: string;
+};
+
+type LandingFooterColumn = {
+  title: string;
+  lines: string[];
+};
+
+type LandingContent = {
+  brandCN: string;
+  brandEN: string;
+  navItems: string[];
+  heroTitle: string;
+  heroSubtitle: string;
+  heroPrimaryCta: string;
+  heroSecondaryCta: string;
+  trustStats: Array<{ value: string; label: string }>;
+  kvTags: string[];
+  valueTitle: string;
+  valueSubtitle: string;
+  valueCards: LandingValueCard[];
+  contentTitle: string;
+  contentSubtitle: string;
+  featuredContent: LandingContentCard;
+  secondaryContents: LandingContentCard[];
+  sceneTitle: string;
+  sceneSubtitle: string;
+  sceneCards: LandingSceneCard[];
+  aboutTitle: string;
+  aboutSubtitle: string;
+  aboutParagraphs: string[];
+  aboutPillars: string[];
+  brandMotto: string;
+  footerColumns: LandingFooterColumn[];
+  footerCopyright: string;
+  footerTagline: string;
+};
 
 const DEFAULT_CONTENT: LandingContent = {
   brandCN: "心境",
@@ -106,13 +158,17 @@ const DEFAULT_CONTENT: LandingContent = {
 export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JSX.Element {
   const navigate = useNavigate();
   const [content, setContent] = useState<LandingContent>(DEFAULT_CONTENT);
+  const heroTitleRef = useRef<HTMLHeadingElement | null>(null);
+  const [heroTitleSize, setHeroTitleSize] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
     const load = async (): Promise<void> => {
       try {
-        const next = await api.getLandingContent();
-        if (active) setContent(next);
+        const res = await fetch("/landing-content.json", { cache: "no-store" });
+        if (!res.ok) throw new Error(`landing content ${res.status}`);
+        const next = (await res.json()) as Partial<LandingContent>;
+        if (active) setContent({ ...DEFAULT_CONTENT, ...next });
       } catch {
         if (active) setContent(DEFAULT_CONTENT);
       }
@@ -143,6 +199,59 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
     return () => observer.disconnect();
   }, [content]);
 
+  useEffect(() => {
+    const el = heroTitleRef.current;
+    if (!el) return;
+
+    const computeFont = (): void => {
+      const parent = el.parentElement;
+      if (!parent) return;
+      if (window.innerWidth < 1200) {
+        setHeroTitleSize(null);
+        return;
+      }
+
+      const available = Math.max(300, parent.clientWidth - 24);
+      const text = content.heroTitle;
+      const style = window.getComputedStyle(el);
+      const weight = style.fontWeight || "700";
+      const family = style.fontFamily || "sans-serif";
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      let low = 34;
+      let high = 68;
+      let best = 34;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        ctx.font = `${weight} ${mid}px ${family}`;
+        const width = ctx.measureText(text).width;
+        if (width <= available) {
+          best = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      let finalSize = best;
+      el.style.fontSize = `${finalSize}px`;
+      let guard = 24;
+      while (el.scrollWidth > available && finalSize > 30 && guard > 0) {
+        finalSize -= 1;
+        el.style.fontSize = `${finalSize}px`;
+        guard -= 1;
+      }
+
+      setHeroTitleSize(finalSize);
+    };
+
+    computeFont();
+    window.addEventListener("resize", computeFont);
+    return () => window.removeEventListener("resize", computeFont);
+  }, [content.heroTitle]);
+
   const enterMind = (): void => {
     if (isAuthenticated) {
       navigate("/mind");
@@ -154,6 +263,19 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
   const scrollTo = (id: string): void => {
     const target = document.getElementById(id);
     if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const renderHeroTitle = (title: string): JSX.Element => {
+    const commaIndex = title.indexOf("，");
+    if (commaIndex === -1) return <>{title}</>;
+    const first = title.slice(0, commaIndex + 1);
+    const second = title.slice(commaIndex + 1);
+    return (
+      <>
+        <span className="hero-title-segment">{first}</span>
+        <span className="hero-title-segment">{second}</span>
+      </>
+    );
   };
 
   return (
@@ -206,7 +328,9 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
       <main>
         <section id="hero" className="hero reveal">
           <div className="hero-copy">
-            <h1 className="hero-title">{content.heroTitle}</h1>
+            <h1 ref={heroTitleRef} className="hero-title" style={heroTitleSize ? { fontSize: `${heroTitleSize}px` } : undefined}>
+              {renderHeroTitle(content.heroTitle)}
+            </h1>
             <p className="hero-subtitle">{content.heroSubtitle}</p>
             <div className="hero-cta">
               <button type="button" className="btn btn-primary large" onClick={enterMind}>

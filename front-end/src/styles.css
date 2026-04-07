@@ -738,3 +738,618 @@ select {
     transform: none;
   }
 }
+
+/* Mira immersive workspace */
+.mira-workbench {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 320px;
+  gap: 16px;
+  padding: 12px 14px 14px;
+  background:
+    radial-gradient(1200px 840px at 64% 22%, rgba(140, 175, 166, 0.2), transparent 58%),
+    radial-gradient(900px 680px at 78% 70%, rgba(163, 194, 179, 0.14), transparent 65%),
+    linear-gradient(180deg, #f5f6f2 0%, #f1f4f1 52%, #eef2ef 100%);
+  animation: mira-page-enter 580ms ease both;
+}
+
+.mira-sidebar,
+.mira-panel-card {
+  border-radius: 18px;
+  border: 0;
+  background: rgba(247, 250, 249, 0.86);
+  box-shadow: 0 6px 16px rgba(79, 108, 96, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.mira-sidebar {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 14px;
+  gap: 12px;
+  background: rgba(244, 248, 245, 0.94);
+}
+
+.mira-brand {
+  font-size: 14px;
+  font-weight: 700;
+  color: #3f5c56;
+  letter-spacing: 0.02em;
+}
+
+.mira-sidebar-head {
+  display: grid;
+  gap: 10px;
+}
+
+.mira-search {
+  width: 100%;
+  border: 0;
+  background: rgba(234, 242, 238, 0.92);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: #334f49;
+}
+
+.mira-search:focus,
+.mira-inputbar input:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(122, 157, 150, 0.2);
+}
+
+.mira-new-chat {
+  border: 0;
+  background: linear-gradient(135deg, #7a9d96 0%, #6f9089 100%);
+  color: #f7fbff;
+  border-radius: 13px;
+  padding: 11px 12px;
+  cursor: pointer;
+}
+
+.mira-new-chat:hover {
+  transform: translateY(-1px);
+}
+
+.mira-session-groups {
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.mira-session-group {
+  display: grid;
+  gap: 8px;
+}
+
+.mira-session-group h4 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5e7771;
+}
+
+.mira-session-item {
+  border: 0;
+  background: transparent;
+  border-radius: 12px;
+  text-align: left;
+  padding: 9px;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+}
+
+.mira-session-item:hover {
+  background: rgba(233, 242, 237, 0.92);
+}
+
+.mira-session-item.active {
+  background: rgba(223, 236, 231, 0.96);
+}
+
+.mira-session-title {
+  font-size: 13px;
+  color: #2f4a45;
+  font-weight: 600;
+}
+
+.mira-session-meta {
+  font-size: 11px;
+  color: #536c66;
+  line-height: 1.4;
+}
+
+.mira-sidebar-foot {
+  display: grid;
+  gap: 8px;
+}
+
+.mira-side-action {
+  border: 0;
+  background: rgba(234, 242, 238, 0.88);
+  color: #36504b;
+  border-radius: 10px;
+  padding: 9px;
+  cursor: pointer;
+}
+
+.mira-side-action:hover {
+  background: rgba(224, 236, 231, 0.98);
+}
+
+.mira-chat-main {
+  min-width: 0;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: linear-gradient(180deg, rgba(243, 247, 244, 0.58) 0%, rgba(239, 244, 240, 0.34) 100%);
+  border-radius: 0;
+}
+
+.mira-chat-main::before,
+.mira-chat-main::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.mira-chat-main::before {
+  width: min(56vw, 760px);
+  aspect-ratio: 1;
+  left: 8%;
+  top: 4%;
+  background: radial-gradient(circle, rgba(113, 164, 188, 0.22) 0%, rgba(122, 157, 150, 0.14) 44%, rgba(122, 157, 150, 0) 72%);
+  filter: blur(34px);
+  animation: mira-space-breathe 6s ease-in-out infinite;
+}
+
+.mira-chat-main::after {
+  width: min(36vw, 440px);
+  aspect-ratio: 1;
+  right: 10%;
+  bottom: 16%;
+  background: radial-gradient(circle, rgba(166, 200, 185, 0.2) 0%, rgba(166, 200, 185, 0) 70%);
+  filter: blur(28px);
+  opacity: 0.22;
+}
+
+.mira-chat-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  position: relative;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.mira-eval-bar {
+  border-radius: 0;
+  border: 0;
+  background: linear-gradient(180deg, rgba(228, 238, 233, 0.86) 0%, rgba(228, 238, 233, 0.62) 100%);
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  width: 100%;
+  margin: 0;
+  align-self: stretch;
+  position: sticky;
+  top: 0;
+  z-index: 8;
+}
+
+.mira-eval-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px 10px;
+  color: #31504a;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mira-eval-headline {
+  letter-spacing: 0.01em;
+}
+
+.mira-eval-detail {
+  border-top: 0;
+  padding: 2px 14px 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.mira-eval-detail p {
+  margin: 0;
+  font-size: 12px;
+  color: #3f5c56;
+  line-height: 1.5;
+}
+
+.mira-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mira-tag {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #35544e;
+  background: rgba(213, 229, 220, 0.8);
+}
+
+.mira-light-hint {
+  font-size: 12px;
+  color: #3d5b55;
+}
+
+.mira-risk-hint {
+  border-radius: 10px;
+  border: 0;
+  background: rgba(244, 238, 228, 0.78);
+  color: #69513b;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mira-message-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 18px 10px;
+  display: grid;
+  gap: 24px;
+}
+
+.mira-msg {
+  display: flex;
+}
+
+.mira-msg.user {
+  justify-content: flex-end;
+}
+
+.mira-msg.assistant {
+  justify-content: flex-start;
+}
+
+.mira-msg-bubble {
+  max-width: min(78%, 760px);
+  border-radius: 24px;
+  padding: 15px 18px;
+  font-size: 14px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+}
+
+.mira-msg.user .mira-msg-bubble {
+  background: linear-gradient(135deg, #dcece7 0%, #d2e7e0 100%);
+  color: #1f3f39;
+  border-bottom-right-radius: 11px;
+}
+
+.mira-msg.assistant .mira-msg-bubble {
+  background: rgba(244, 243, 236, 0.92);
+  color: #33443b;
+  border-bottom-left-radius: 11px;
+}
+
+.mira-chat-input-dock {
+  position: sticky;
+  bottom: 0;
+  padding: 10px 14px 14px;
+  background: linear-gradient(180deg, rgba(239, 244, 241, 0) 0%, rgba(239, 244, 241, 0.82) 42%, rgba(239, 244, 241, 0.94) 100%);
+  backdrop-filter: blur(6px);
+  z-index: 7;
+}
+
+.mira-inputbar {
+  border: 0;
+  border-radius: 999px;
+  background: rgba(244, 249, 246, 0.86);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px;
+  box-shadow: inset 0 0 0 1px rgba(145, 173, 165, 0.24), 0 8px 18px rgba(80, 109, 97, 0.06);
+}
+
+.mira-inputbar.compact {
+  background: rgba(245, 249, 246, 0.92);
+}
+
+.mira-inputbar input {
+  border: 0;
+  border-radius: 999px;
+  background: rgba(236, 244, 240, 0.95);
+  color: #2f4d47;
+  padding: 11px 14px;
+  min-width: 0;
+}
+
+.mira-input-icon,
+.mira-send {
+  border: 0;
+  background: rgba(229, 239, 234, 0.94);
+  color: #36524d;
+  border-radius: 999px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.mira-input-icon.active {
+  background: rgba(200, 224, 213, 0.95);
+  color: #264b41;
+}
+
+.mira-send {
+  background: linear-gradient(135deg, #7a9d96 0%, #6f9089 100%);
+  color: #f9fcff;
+  font-weight: 600;
+}
+
+.mira-empty-content {
+  width: min(760px, 88%);
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+}
+
+.mira-empty-content h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 700;
+  color: #35534d;
+  letter-spacing: 0.01em;
+}
+
+.mira-empty-content p {
+  margin: 0;
+  color: #556f69;
+  font-size: 14px;
+}
+
+.mira-chat-main.empty {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 0;
+  background: linear-gradient(180deg, rgba(245, 249, 246, 0.84) 0%, rgba(240, 245, 241, 0.8) 100%);
+}
+
+.mira-ambient-orb {
+  position: absolute;
+  width: min(34vw, 360px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(237, 250, 248, 0.82) 0%, rgba(156, 198, 192, 0.52) 34%, rgba(130, 176, 197, 0.24) 64%, rgba(117, 168, 207, 0.05) 100%);
+  filter: blur(6px);
+  box-shadow:
+    0 0 54px rgba(135, 180, 172, 0.28),
+    0 0 112px rgba(132, 176, 198, 0.2);
+  animation: mira-breathe 5.2s ease-in-out infinite;
+}
+
+.mira-emotion-panel {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  overflow: auto;
+  padding-right: 2px;
+  background: linear-gradient(180deg, rgba(243, 248, 244, 0.74) 0%, rgba(239, 245, 241, 0.5) 100%);
+  border-radius: 16px;
+}
+
+.mira-panel-card {
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+  transition: transform 220ms ease, box-shadow 220ms ease;
+  border: 0;
+  background: rgba(244, 248, 245, 0.9);
+  box-shadow: 0 1px 0 rgba(122, 157, 150, 0.08);
+}
+
+.mira-panel-card:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 10px 20px rgba(86, 113, 102, 0.1);
+}
+
+.mira-panel-card header {
+  display: grid;
+  gap: 4px;
+}
+
+.mira-panel-card h3 {
+  margin: 0;
+  font-size: 15px;
+  color: #2f4c46;
+}
+
+.mira-panel-card header span {
+  font-size: 12px;
+  color: #506a64;
+}
+
+.mira-dim-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.mira-dim-item {
+  border-radius: 14px;
+  border: 0;
+  background: rgba(236, 244, 240, 0.88);
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.mira-dim-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 15px rgba(82, 109, 98, 0.1);
+}
+
+.mira-dim-title {
+  font-size: 13px;
+  color: #2f4c46;
+  font-weight: 600;
+}
+
+.mira-dim-item p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #425d58;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mira-task-list {
+  display: grid;
+  gap: 7px;
+}
+
+.mira-task-item {
+  border-radius: 12px;
+  border: 0;
+  background: rgba(236, 244, 240, 0.84);
+  padding: 8px 10px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #3f5a54;
+}
+
+.mira-task-item input {
+  margin-top: 1px;
+}
+
+.mira-task-item.checked {
+  background: rgba(224, 238, 230, 0.9);
+  color: #304c45;
+}
+
+.mira-error-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 0;
+  background: rgba(245, 237, 224, 0.92);
+  color: #655037;
+  font-size: 12px;
+  z-index: 20;
+}
+
+@keyframes mira-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mira-breathe {
+  0% {
+    transform: scale(0.94);
+    filter: blur(6px);
+  }
+  50% {
+    transform: scale(1.05);
+    filter: blur(3px);
+  }
+  100% {
+    transform: scale(0.94);
+    filter: blur(6px);
+  }
+}
+
+@keyframes mira-space-breathe {
+  0% {
+    transform: scale(1);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.26;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.2;
+  }
+}
+
+@media (max-width: 1280px) {
+  .mira-workbench {
+    grid-template-columns: 224px minmax(0, 1fr) 290px;
+    gap: 12px;
+    padding: 10px 12px 12px;
+  }
+}
+
+@media (max-width: 1060px) {
+  .mira-workbench {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .mira-emotion-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .mira-workbench {
+    grid-template-columns: 1fr;
+    padding: 8px 10px 10px;
+  }
+
+  .mira-sidebar {
+    display: none;
+  }
+
+  .mira-chat-shell {
+    padding: 0;
+    gap: 0;
+  }
+
+  .mira-msg-bubble {
+    max-width: 92%;
+  }
+}

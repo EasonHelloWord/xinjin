@@ -179,59 +179,6 @@ export interface ProfileTimeline {
   analyses: Array<AnalysisResult & { inputText: string }>;
 }
 
-export interface LandingValueCard {
-  icon: string;
-  title: string;
-  body: string;
-}
-
-export interface LandingContentCard {
-  tag: string;
-  title: string;
-  body: string;
-}
-
-export interface LandingSceneCard {
-  eyebrow: string;
-  title: string;
-  body: string;
-}
-
-export interface LandingFooterColumn {
-  title: string;
-  lines: string[];
-}
-
-export interface LandingContent {
-  brandCN: string;
-  brandEN: string;
-  navItems: string[];
-  heroTitle: string;
-  heroSubtitle: string;
-  heroPrimaryCta: string;
-  heroSecondaryCta: string;
-  trustStats: Array<{ value: string; label: string }>;
-  kvTags: string[];
-  valueTitle: string;
-  valueSubtitle: string;
-  valueCards: LandingValueCard[];
-  contentTitle: string;
-  contentSubtitle: string;
-  featuredContent: LandingContentCard;
-  secondaryContents: LandingContentCard[];
-  sceneTitle: string;
-  sceneSubtitle: string;
-  sceneCards: LandingSceneCard[];
-  aboutTitle: string;
-  aboutSubtitle: string;
-  aboutParagraphs: string[];
-  aboutPillars: string[];
-  brandMotto: string;
-  footerColumns: LandingFooterColumn[];
-  footerCopyright: string;
-  footerTagline: string;
-}
-
 type SSEHandlers = {
   onToken?: (text: string) => void;
   onPulse?: (v: number) => void;
@@ -486,10 +433,5 @@ export const api = {
 
   getProfileSummary: (): Promise<ProfileSummary> => request<ProfileSummary>("/api/profile/summary"),
 
-  getProfileTimeline: (): Promise<ProfileTimeline> => request<ProfileTimeline>("/api/profile/timeline"),
-
-  getLandingContent: (): Promise<LandingContent> =>
-    request<LandingContent>("/api/landing/content", {
-      skipAuth: true
-    })
+  getProfileTimeline: (): Promise<ProfileTimeline> => request<ProfileTimeline>("/api/profile/timeline")
 };

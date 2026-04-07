@@ -7,9 +7,9 @@
   "heroPrimaryCta": "立即开始",
   "heroSecondaryCta": "了解更多",
   "trustStats": [
-    { "value": "24/7", "label": "温柔陪伴" },
-    { "value": "1v1", "label": "真实连接" },
-    { "value": "长期", "label": "持续成长" }
+    { "value": "7×24h", "label": "随时陪伴" },
+    { "value": "1v1", "label": "个性化服务" },
+    { "value": "∞", "label": "持续成长" }
   ],
   "kvTags": ["情绪识别", "呼吸引导", "睡前放松", "自我接纳", "成长记录"],
   "valueTitle": "核心价值",
