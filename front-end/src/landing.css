@@ -282,15 +282,78 @@
 
 .kv-wave {
   margin: 18px 0 16px;
-  height: 78px;
+  height: 94px;
   border-radius: 16px;
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(140px 36px at 16% 70%, rgba(115, 162, 166, 0.22), rgba(115, 162, 166, 0) 74%),
-    radial-gradient(130px 34px at 78% 32%, rgba(153, 189, 179, 0.19), rgba(153, 189, 179, 0) 76%),
-    linear-gradient(120deg, rgba(238, 244, 244, 0.84) 0%, rgba(230, 239, 240, 0.66) 100%);
-  box-shadow: inset 0 0 0 1px rgba(108, 137, 140, 0.2);
+    radial-gradient(120% 130% at 8% 100%, rgba(165, 201, 196, 0.2), rgba(165, 201, 196, 0) 52%),
+    radial-gradient(100% 100% at 90% 10%, rgba(199, 224, 217, 0.22), rgba(199, 224, 217, 0) 56%),
+    linear-gradient(130deg, rgba(244, 250, 249, 0.9) 0%, rgba(235, 244, 242, 0.72) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(118, 151, 149, 0.17),
+    inset 0 10px 24px rgba(255, 255, 255, 0.25);
+  display: grid;
+  place-items: center;
+  padding: 0 22px;
+}
+
+.kv-wave::before,
+.kv-wave::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  filter: blur(20px);
+}
+
+.kv-wave::before {
+  width: 132px;
+  height: 132px;
+  left: -18px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: radial-gradient(circle, rgba(145, 191, 182, 0.24), rgba(145, 191, 182, 0));
+  animation: kv-aura-drift 14s ease-in-out infinite;
+}
+
+.kv-wave::after {
+  width: 164px;
+  height: 164px;
+  right: -48px;
+  top: 50%;
+  background: radial-gradient(circle, rgba(210, 232, 224, 0.3), rgba(210, 232, 224, 0));
+  animation: kv-aura-drift 18s ease-in-out infinite reverse;
+}
+
+.kv-typewriter {
+  margin: 0;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  color: #587177;
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  font-weight: 520;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.32);
+  position: relative;
+  z-index: 1;
+}
+
+.kv-caret {
+  width: 1px;
+  height: 1.05em;
+  margin-left: 4px;
+  background: rgba(86, 122, 123, 0.78);
+  border-radius: 999px;
+  animation: caret-blink 1.6s ease-in-out infinite;
 }
 
 .kv-tags {
@@ -673,6 +736,33 @@
   100% {
     transform: translateY(0) scale(1);
     opacity: 0.95;
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  42%,
+  100% {
+    opacity: 1;
+  }
+  60%,
+  82% {
+    opacity: 0;
+  }
+}
+
+@keyframes kv-aura-drift {
+  0% {
+    transform: translateY(-50%) scale(0.96);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translateY(-50%) scale(1.08);
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(-50%) scale(0.96);
+    opacity: 0.55;
   }
 }
 
