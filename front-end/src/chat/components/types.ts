@@ -29,10 +29,12 @@ export interface SidebarProps {
   sessions: SessionItem[];
   activeSessionId: string;
   onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
   onCreateSession: () => void;
   onRequestReassess: () => void;
   onLogout: () => void;
   creating: boolean;
+  deletingSessionId: string;
 }
 
 export interface ChatAreaProps {

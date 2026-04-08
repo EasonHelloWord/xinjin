@@ -20,9 +20,6 @@ export function InputBar({
 
   return (
     <form className={`mira-inputbar ${compact ? "compact" : ""}`} onSubmit={onFormSubmit}>
-      <button type="button" className="mira-input-icon" title="附件（即将支持）" disabled>
-        ⊕
-      </button>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}

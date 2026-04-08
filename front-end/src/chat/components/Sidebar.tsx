@@ -46,10 +46,12 @@ export function Sidebar({
   sessions,
   activeSessionId,
   onSelectSession,
+  onDeleteSession,
   onCreateSession,
   onRequestReassess,
   onLogout,
-  creating
+  creating,
+  deletingSessionId
 }: SidebarProps): JSX.Element {
   const filtered = sessions.filter((item) => {
     if (!search.trim()) return true;
@@ -77,15 +79,26 @@ export function Sidebar({
           <section key={group.label} className="mira-session-group">
             <h4>{group.label}</h4>
             {group.items.map((session) => (
-              <button
-                type="button"
-                key={session.id}
-                className={`mira-session-item ${session.id === activeSessionId ? "active" : ""}`}
-                onClick={() => onSelectSession(session.id)}
-              >
-                <div className="mira-session-title">{session.title || "未命名会话"}</div>
-                <div className="mira-session-meta">{`${session.preview || "等待开始对话"} · ${formatSessionTime(session.created_at)}`}</div>
-              </button>
+              <div key={session.id} className="mira-session-row">
+                <button
+                  type="button"
+                  className={`mira-session-item ${session.id === activeSessionId ? "active" : ""}`}
+                  onClick={() => onSelectSession(session.id)}
+                >
+                  <div className="mira-session-title">{session.title || "未命名会话"}</div>
+                  <div className="mira-session-meta">{`${session.preview || "等待开始对话"} · ${formatSessionTime(session.created_at)}`}</div>
+                </button>
+                <button
+                  type="button"
+                  className="mira-session-delete"
+                  onClick={() => onDeleteSession(session.id)}
+                  disabled={creating || deletingSessionId === session.id}
+                  aria-label={`删除会话 ${session.title || "未命名会话"}`}
+                  title="删除会话"
+                >
+                  {deletingSessionId === session.id ? "…" : "×"}
+                </button>
+              </div>
             ))}
           </section>
         ))}

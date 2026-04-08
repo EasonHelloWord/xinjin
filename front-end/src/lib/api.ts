@@ -316,13 +316,18 @@ export const api = {
       skipAuth: true
     }),
 
-  createSession: async (title?: string): Promise<{ sessionId: string }> =>
-    request<{ sessionId: string }>("/api/chat/sessions", {
+  createSession: async (title?: string): Promise<{ sessionId: string; session: ChatSession }> =>
+    request<{ sessionId: string; session: ChatSession }>("/api/chat/sessions", {
       method: "POST",
       body: JSON.stringify(title ? { title } : {})
     }),
 
   listSessions: (): Promise<ChatSession[]> => request<ChatSession[]>("/api/chat/sessions"),
+
+  deleteSession: (sessionId: string): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(`/api/chat/sessions/${sessionId}`, {
+      method: "DELETE"
+    }),
 
   getMessages: (sessionId: string): Promise<ChatMessage[]> =>
     request<ChatMessage[]>(`/api/chat/sessions/${sessionId}/messages`),

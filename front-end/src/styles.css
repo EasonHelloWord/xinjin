@@ -742,6 +742,7 @@ select {
 /* Mira immersive workspace */
 .mira-workbench {
   height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 320px;
   gap: 16px;
@@ -763,11 +764,13 @@ select {
 }
 
 .mira-sidebar {
+  min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   padding: 14px;
   gap: 12px;
   background: rgba(244, 248, 245, 0.94);
+  overflow: hidden;
 }
 
 .mira-brand {
@@ -811,6 +814,7 @@ select {
 }
 
 .mira-session-groups {
+  min-height: 0;
   overflow: auto;
   display: grid;
   align-content: start;
@@ -820,6 +824,10 @@ select {
 .mira-session-group {
   display: grid;
   gap: 8px;
+}
+
+.mira-session-row {
+  position: relative;
 }
 
 .mira-session-group h4 {
@@ -835,10 +843,12 @@ select {
   background: transparent;
   border-radius: 12px;
   text-align: left;
-  padding: 9px;
+  padding: 9px 32px 9px 9px;
   cursor: pointer;
   display: grid;
   gap: 4px;
+  min-width: 0;
+  width: 100%;
 }
 
 .mira-session-item:hover {
@@ -847,6 +857,41 @@ select {
 
 .mira-session-item.active {
   background: rgba(223, 236, 231, 0.96);
+}
+
+.mira-session-delete {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(228, 207, 200, 0.36);
+  color: #8f4f46;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  opacity: 0;
+  transition: background 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+}
+
+.mira-session-row:hover .mira-session-delete,
+.mira-session-delete:focus-visible,
+.mira-session-delete:disabled {
+  opacity: 1;
+}
+
+.mira-session-delete:hover:not(:disabled) {
+  background: rgba(232, 204, 194, 0.92);
+  color: #7b3d35;
+}
+
+.mira-session-delete:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 
 .mira-session-title {
@@ -881,6 +926,7 @@ select {
 
 .mira-chat-main {
   min-width: 0;
+  min-height: 0;
   height: 100%;
   position: relative;
   overflow: hidden;
@@ -1014,13 +1060,17 @@ select {
   min-height: 0;
   overflow: auto;
   padding: 18px 18px 10px;
-  display: grid;
-  gap: 24px;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
 }
 
 .mira-msg {
   display: flex;
+  width: 100%;
+  align-items: flex-start;
+  flex: 0 0 auto;
 }
 
 .mira-msg.user {
@@ -1032,12 +1082,17 @@ select {
 }
 
 .mira-msg-bubble {
+  display: inline-block;
+  width: fit-content;
   max-width: min(78%, 760px);
   border-radius: 24px;
+  min-height: 0;
   padding: 15px 18px;
   font-size: 14px;
   line-height: 1.9;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .mira-msg.user .mira-msg-bubble {
@@ -1066,7 +1121,7 @@ select {
   border-radius: 999px;
   background: rgba(244, 249, 246, 0.86);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
   align-items: center;
   padding: 7px;
@@ -1157,6 +1212,7 @@ select {
 
 .mira-emotion-panel {
   min-width: 0;
+  min-height: 0;
   display: grid;
   gap: 14px;
   align-content: start;

@@ -94,7 +94,7 @@ const createSession = async (userId: string, title?: string): Promise<SessionRow
   const session: SessionRow = {
     id: randomUUID(),
     user_id: userId,
-    title: title?.trim() || "\u9ed8\u8ba4\u4f1a\u8bdd",
+    title: title?.trim() || "新对话",
     created_at: Date.now()
   };
 
@@ -108,6 +108,18 @@ const createSession = async (userId: string, title?: string): Promise<SessionRow
 
   return session;
 };
+
+const deleteSession = async (sessionId: string): Promise<void> => {
+  const db = await getDb();
+  await db.run("DELETE FROM messages WHERE session_id = ?", sessionId);
+  await db.run("DELETE FROM sessions WHERE id = ?", sessionId);
+};
+
+const toSessionResponse = (session: SessionRow) => ({
+  id: session.id,
+  title: session.title,
+  created_at: session.created_at
+});
 
 const getRecentHistory = async (sessionId: string, limit = 20): Promise<ChatHistoryItem[]> => {
   const db = await getDb();
@@ -220,7 +232,10 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
 
       const userId = asUserId(request);
       const session = await createSession(userId, parsed.data.title);
-      return { sessionId: session.id };
+      return {
+        sessionId: session.id,
+        session: toSessionResponse(session)
+      };
     }
   });
 
@@ -231,11 +246,20 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
     handler: async (request: FastifyRequest, _reply: FastifyReply) => {
       const userId = asUserId(request);
       const sessions = await getSessionsByUser(userId);
-      return sessions.map((session) => ({
-        id: session.id,
-        title: session.title,
-        created_at: session.created_at
-      }));
+      return sessions.map(toSessionResponse);
+    }
+  });
+
+  fastify.route<{ Params: { id: string } }>({
+    method: "DELETE",
+    url: "/api/chat/sessions/:id",
+    preHandler: authMiddleware,
+    handler: async (request, _reply: FastifyReply) => {
+      const userId = asUserId(request);
+      const sessionId = request.params.id;
+      await getOwnedSession(sessionId, userId);
+      await deleteSession(sessionId);
+      return { ok: true };
     }
   });
 

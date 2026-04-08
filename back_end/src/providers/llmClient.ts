@@ -1,8 +1,9 @@
 import OpenAI from "openai";
 
-const resolveLlmApiKey = (): string => (process.env.LLM_API_KEY || process.env.DEEPSEEK_API_KEY || "").trim();
-const LLM_BASE_URL = process.env.LLM_BASE_URL || process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com";
-const LLM_MODEL = process.env.LLM_MODEL || process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const resolveLlmApiKey = (): string => (process.env.LLM_API_KEY || "").trim();
+const LLM_BASE_URL = (process.env.LLM_BASE_URL || "https://api.openai.com/v1").trim();
+const LLM_MODEL = (process.env.LLM_MODEL || "gpt-4o-mini").trim();
+const MCP_DEBUG = process.env.MCP_DEBUG === "1";
 
 export const hasLlmConfig = (): boolean =>
   resolveLlmApiKey().length > 0;
@@ -44,12 +45,18 @@ export const llmChat = async (
     if (!toolExecutor) break;
 
     for (const tc of msg.tool_calls as Array<{ id: string; function: { name: string; arguments: string } }>) {
+      if (MCP_DEBUG) {
+        console.info(`[xinjin-llm] tool_call ${tc.function.name} ${tc.function.arguments || "{}"}`);
+      }
       let result: string;
       try {
         const args = JSON.parse(tc.function.arguments || "{}") as Record<string, unknown>;
         result = await toolExecutor(tc.function.name, args);
       } catch (e) {
         result = `Error: ${String(e)}`;
+      }
+      if (MCP_DEBUG) {
+        console.info(`[xinjin-llm] tool_result ${tc.function.name} ${result.slice(0, 400)}`);
       }
       msgs.push({ role: "tool", tool_call_id: tc.id, content: result });
     }

@@ -25,8 +25,8 @@ npm run start
 
 - `JWT_SECRET` (optional): JWT signing secret. Default is `dev-secret-change-me`.
 - `LLM_API_KEY` (optional): when present, backend uses the configured LLM instead of mock replies.
-- `LLM_BASE_URL` (optional): defaults to `https://api.deepseek.com`.
-- `LLM_MODEL` (optional): defaults to `deepseek-chat`.
+- `LLM_BASE_URL` (optional): defaults to `https://api.openai.com/v1`.
+- `LLM_MODEL` (optional): defaults to `gpt-4o-mini`.
 - `MCP_SERVER_CMD` (optional): command used to start the local MCP server over stdio.
 - `MCP_SERVER_CWD` (optional): working directory for `MCP_SERVER_CMD`. Use this if the MCP command contains relative paths.
 - `XINJIN_CONFIG_FILE` (optional): extra config file path. Supports `.env`-style files and `.json`.
@@ -42,8 +42,8 @@ Example `.env`:
 
 ```env
 LLM_API_KEY=your-llm-api-key
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL=deepseek-chat
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
 MCP_SERVER_CMD=node dist/index.js
 MCP_SERVER_CWD=../mcp_server
 ```
@@ -89,6 +89,7 @@ Response:
 
 - `POST /api/chat/sessions` `{ "title"?: "..." }`
 - `GET /api/chat/sessions`
+- `DELETE /api/chat/sessions/:id`
 - `GET /api/chat/sessions/:id/messages`
 - `POST /api/chat/sessions/:id/messages` `{ "content": "..." }`
 - `POST /api/chat/sessions/:id/stream` `{ "content": "...", "voice"?: true }`

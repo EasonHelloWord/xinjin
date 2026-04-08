@@ -26,6 +26,7 @@ export class VoiceInput {
   private analyser: AnalyserNode | null = null;
   private meterBuffer: Uint8Array<ArrayBuffer> | null = null;
   private rafId: number | null = null;
+  private transcriptDelivered = false;
 
   isSupported(): boolean {
     return (
@@ -60,6 +61,7 @@ export class VoiceInput {
     }
     if (this.status === "connecting" || this.status === "recording") return;
 
+    this.transcriptDelivered = false;
     this.status = "connecting";
     this.broadcastStatus();
 
@@ -107,8 +109,10 @@ export class VoiceInput {
             ? parsed.payload.text
             : undefined;
 
-        if (transcript && transcript.trim()) {
+        if (transcript && transcript.trim() && !this.transcriptDelivered) {
+          this.transcriptDelivered = true;
           this.transcriptListeners.forEach((cb) => cb(transcript.trim()));
+          window.setTimeout(() => this.stop(), 0);
         }
       };
       ws.onclose = () => {
@@ -193,6 +197,7 @@ export class VoiceInput {
     this.audioContext = null;
     this.analyser = null;
     this.meterBuffer = null;
+    this.transcriptDelivered = false;
   }
 
   private broadcastStatus(): void {
