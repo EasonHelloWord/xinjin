@@ -852,7 +852,6 @@ select {
 }
 
 .mira-session-scrollbar {
-  display: none;
   position: absolute;
   top: 6px;
   right: 4px;
@@ -1142,7 +1141,6 @@ select {
 }
 
 .mira-message-scrollbar {
-  display: none;
   position: absolute;
   top: 6px;
   right: 4px;
