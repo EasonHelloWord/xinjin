@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { WaveAnimation } from "../components/WaveAnimation";
 import "../landing.css";
 
 interface LandingPageProps {
@@ -362,7 +363,9 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
               </div>
               <h3>心境 Mira Companion</h3>
               <p>今晚你想先被倾听，还是先放松下来？</p>
-              <div className="kv-wave" />
+              <div className="kv-wave" aria-hidden="true">
+                <WaveAnimation speed={1} amplitude={18} color="#78b8bb" />
+              </div>
               <div className="kv-tags">
                 {content.kvTags.map((tag) => (
                   <span key={tag} className="kv-tag">
