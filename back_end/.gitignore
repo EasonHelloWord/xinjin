@@ -8,3 +8,4 @@ env.sh
 env.zsh
 *.tsbuildinfo
 ./data
+/data/xinjin.sqlite
