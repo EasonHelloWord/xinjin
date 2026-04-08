@@ -115,7 +115,6 @@ SSE stream events:
 ## WebSocket Endpoints (existing)
 
 - Main WS: `ws://localhost:8787`
-- Voice placeholder WS: `ws://localhost:8787/voice`
 
 ## Curl Examples
 

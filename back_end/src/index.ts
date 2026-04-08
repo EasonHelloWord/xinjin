@@ -8,7 +8,6 @@ import { registerAuthRoutes } from "./routesAuth";
 import { registerChatRoutes } from "./routesChat";
 import { registerMindRoutes } from "./routesMind";
 import { registerMainWs } from "./wsMain";
-import { registerVoiceWs } from "./wsVoice";
 
 const createServer = async () => {
   const fastify = Fastify({
@@ -96,7 +95,6 @@ const createServer = async () => {
   await registerMindRoutes(fastify);
   await fastify.register(websocket);
   await registerMainWs(fastify);
-  await registerVoiceWs(fastify);
 
   return fastify;
 };
@@ -109,7 +107,7 @@ const start = async (): Promise<void> => {
       host: "0.0.0.0",
       port: 8787
     });
-    app.log.info("xinjin backend listening on ws://localhost:8787 and ws://localhost:8787/voice");
+    app.log.info("xinjin backend listening on ws://localhost:8787");
   } catch (err) {
     app.log.error({ err }, "failed to start server");
     process.exit(1);

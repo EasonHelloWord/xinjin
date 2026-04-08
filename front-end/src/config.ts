@@ -1,10 +1,8 @@
-const resolveWsBase = (): { wsUrl: string; voiceStreamUrl: string } => {
+const resolveWsBase = (): { wsUrl: string } => {
   const envWs = (import.meta.env.VITE_WS_URL as string | undefined)?.trim();
-  const envVoice = (import.meta.env.VITE_VOICE_WS_URL as string | undefined)?.trim();
-  if (envWs || envVoice) {
+  if (envWs) {
     return {
-      wsUrl: envWs || "ws://127.0.0.1:8787",
-      voiceStreamUrl: envVoice || `${envWs || "ws://127.0.0.1:8787"}/voice`
+      wsUrl: envWs || "ws://127.0.0.1:8787"
     };
   }
 
@@ -12,14 +10,12 @@ const resolveWsBase = (): { wsUrl: string; voiceStreamUrl: string } => {
     const host = window.location.hostname || "127.0.0.1";
     const scheme = window.location.protocol === "https:" ? "wss" : "ws";
     return {
-      wsUrl: `${scheme}://${host}:8787`,
-      voiceStreamUrl: `${scheme}://${host}:8787/voice`
+      wsUrl: `${scheme}://${host}:8787`
     };
   }
 
   return {
-    wsUrl: "ws://127.0.0.1:8787",
-    voiceStreamUrl: "ws://127.0.0.1:8787/voice"
+    wsUrl: "ws://127.0.0.1:8787"
   };
 };
 
@@ -27,7 +23,6 @@ const WS_BASE = resolveWsBase();
 
 export const APP_CONFIG = {
   wsUrl: WS_BASE.wsUrl,
-  voiceStreamUrl: WS_BASE.voiceStreamUrl,
   cloud: {
     autoDegradeFpsThreshold: 45,
     avgWindow: 30,

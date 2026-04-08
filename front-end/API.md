@@ -209,13 +209,15 @@ type InteractionMode = "gravity" | "off" | "repel" | "vortex";
 
 - `isSupported(): boolean`
 - `onStatus(cb): () => void`
+- `onTranscript(cb): () => void`
 - `start(): void`
 - `stop(): void`
 
 行为说明：
 
 - `start` 后进入 `recording`
-- 约 2s 后产出占位文本，触发 `voice_input`，并调用 `chatService.sendText`
+- 浏览器语音识别会持续产出中间文本（interim）和最终文本（final）
+- 识别文本实时回填到输入框，不自动发送
 
 ### 5.4 `VideoInputChannel` (`src/input/videoInputChannel.ts`)
 

@@ -4,7 +4,6 @@ import { api, ChatMessage, ChatSession } from "../lib/api";
 import { clearAuthToken } from "../lib/auth";
 import { emitPulse } from "../lib/pulseBus";
 import { voiceInput, VoiceStatus } from "../input/voiceInput";
-import { voiceTts } from "../input/voiceTts";
 import { ChatArea } from "./components/ChatArea";
 import { EmotionPanel } from "./components/EmotionPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -20,7 +19,6 @@ interface ChatDockProps {
 }
 
 const makeId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-const ENABLE_BROWSER_TTS_FALLBACK = String(import.meta.env.VITE_ENABLE_BROWSER_TTS_FALLBACK || "").toLowerCase() === "true";
 
 const toPreview = (messages: ChatMessage[]): string => {
   const last = messages[messages.length - 1];
@@ -98,11 +96,16 @@ export function ChatDock({
   const sendingRef = useRef(false);
   const recentSubmitRef = useRef<{ text: string; at: number } | null>(null);
   const loadSeqRef = useRef(0);
+  const inputRef = useRef("");
+  const voiceBaseInputRef = useRef<string | null>(null);
 
   const voiceInputActive = voiceStatus === "recording" || voiceStatus === "connecting";
 
+  useEffect(() => {
+    inputRef.current = input;
+  }, [input]);
+
   const stopSpeech = (): void => {
-    voiceTts.stop();
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -174,20 +177,29 @@ export function ChatDock({
 
   useEffect(() => {
     const offVoiceStatus = voiceInput.onStatus(setVoiceStatus);
-    const offTtsLevel = voiceTts.onLevel((level) => emitPulse(level));
     const offTranscript = voiceInput.onTranscript((text) => {
       if (!chatEnabled) return;
-      void sendMessage(text);
+      const normalized = text.trim().replace(/\s+/g, " ");
+      if (!normalized) return;
+      const base = voiceBaseInputRef.current ?? inputRef.current;
+      voiceBaseInputRef.current = base;
+      const prefix = base.trim();
+      const next = prefix ? `${prefix} ${normalized}` : normalized;
+      setInput(next);
     });
 
     return () => {
       offVoiceStatus();
-      offTtsLevel();
       offTranscript();
       stopSpeech();
       voiceInput.stop();
     };
   }, [chatEnabled]);
+
+  useEffect(() => {
+    if (voiceInputActive) return;
+    voiceBaseInputRef.current = null;
+  }, [voiceInputActive]);
 
   useEffect(() => {
     const key = dailyTaskCheckKey();
@@ -223,17 +235,15 @@ export function ChatDock({
   const speakWithPulse = (text: string): void => {
     if (!voiceEnabled) return;
     stopSpeech();
-    void voiceTts.speak(text).catch((err) => {
-      if (ENABLE_BROWSER_TTS_FALLBACK && "speechSynthesis" in window) {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1;
-        utterance.pitch = 1;
-        utterance.onboundary = () => emitPulse(0.25);
-        window.speechSynthesis.speak(utterance);
-        return;
-      }
-      setError((err as Error).message || "云端语音播报失败");
-    });
+    if (!("speechSynthesis" in window)) {
+      setError("当前浏览器不支持语音播报");
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.onboundary = () => emitPulse(0.25);
+    window.speechSynthesis.speak(utterance);
   };
 
   const sendMessage = async (rawText: string): Promise<void> => {
@@ -371,6 +381,7 @@ export function ChatDock({
       voiceInput.stop();
       return;
     }
+    voiceBaseInputRef.current = inputRef.current;
     void voiceInput.start();
   };
 
@@ -380,10 +391,10 @@ export function ChatDock({
       stopSpeech();
       return;
     }
-    void voiceTts.unlock().catch((err) => {
+    if (!("speechSynthesis" in window)) {
       setVoiceEnabled(false);
-      setError((err as Error).message || "浏览器阻止了语音播放，请点击页面后重试");
-    });
+      setError("当前浏览器不支持语音播报");
+    }
   };
 
   const onToggleTask = (task: string): void => {

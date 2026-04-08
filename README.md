@@ -86,7 +86,6 @@ npm run dev
 
 - `VITE_API_BASE`：HTTP API 基础地址（例如 `http://localhost:8787`）
 - `VITE_WS_URL`：主 WebSocket 地址
-- `VITE_VOICE_WS_URL`：语音 WebSocket 地址
 
 不设置时，前端会按当前域名和内置候选地址自动尝试连接。
 
@@ -130,7 +129,6 @@ npm run dev
 ### WebSocket
 
 - `ws://localhost:8787`
-- `ws://localhost:8787/voice`
 
 ## 生产构建
 
