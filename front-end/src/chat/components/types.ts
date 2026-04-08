@@ -1,3 +1,4 @@
+import { RefObject } from "react";
 import { ChatMessage, ChatSession } from "../../lib/api";
 
 export interface SixDimAdvice {
@@ -42,25 +43,31 @@ export interface ChatAreaProps {
   analysisSummary: AnalysisSummary;
   assessmentLabel: string;
   inputValue: string;
+  inputRef: RefObject<HTMLInputElement>;
   onInputChange: (value: string) => void;
   onSubmit: () => void;
   onToggleVoiceInput: () => void;
   onToggleVoiceOutput: (enabled: boolean) => void;
   voiceOutputEnabled: boolean;
   voiceInputActive: boolean;
-  disabled: boolean;
+  inputDisabled: boolean;
+  controlsDisabled: boolean;
+  submitDisabled: boolean;
   loading: boolean;
 }
 
 export interface InputBarProps {
   value: string;
+  inputRef: RefObject<HTMLInputElement>;
   onChange: (value: string) => void;
   onSubmit: () => void;
   onToggleVoiceInput: () => void;
   onToggleVoiceOutput: (enabled: boolean) => void;
   voiceOutputEnabled: boolean;
   voiceInputActive: boolean;
-  disabled: boolean;
+  inputDisabled: boolean;
+  controlsDisabled: boolean;
+  submitDisabled: boolean;
   loading: boolean;
   compact?: boolean;
 }

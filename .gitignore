@@ -1,1 +1,4 @@
 .content_registry.json
+front-end/.env.local
+runtime-logs/
+AGENTS.md

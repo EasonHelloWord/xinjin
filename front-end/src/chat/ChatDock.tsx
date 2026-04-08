@@ -93,16 +93,18 @@ export function ChatDock({
   const [checkedTaskIds, setCheckedTaskIds] = useState<Set<string>>(new Set());
 
   const assistantTextRef = useRef("");
+  const inputElementRef = useRef<HTMLInputElement>(null);
+  const inputValueRef = useRef("");
+  const voiceBaseInputRef = useRef<string | null>(null);
   const sendingRef = useRef(false);
+  const refocusInputAfterSendRef = useRef(false);
   const recentSubmitRef = useRef<{ text: string; at: number } | null>(null);
   const loadSeqRef = useRef(0);
-  const inputRef = useRef("");
-  const voiceBaseInputRef = useRef<string | null>(null);
 
   const voiceInputActive = voiceStatus === "recording" || voiceStatus === "connecting";
 
   useEffect(() => {
-    inputRef.current = input;
+    inputValueRef.current = input;
   }, [input]);
 
   const stopSpeech = (): void => {
@@ -181,7 +183,7 @@ export function ChatDock({
       if (!chatEnabled) return;
       const normalized = text.trim().replace(/\s+/g, " ");
       if (!normalized) return;
-      const base = voiceBaseInputRef.current ?? inputRef.current;
+      const base = voiceBaseInputRef.current ?? inputValueRef.current;
       voiceBaseInputRef.current = base;
       const prefix = base.trim();
       const next = prefix ? `${prefix} ${normalized}` : normalized;
@@ -222,6 +224,16 @@ export function ChatDock({
       setCheckedTaskIds(new Set());
     }
   }, [analysisSummary.microTasks]);
+
+  useEffect(() => {
+    if (!refocusInputAfterSendRef.current || !chatEnabled) return;
+    const rafId = window.requestAnimationFrame(() => {
+      if (!inputElementRef.current) return;
+      inputElementRef.current.focus();
+      refocusInputAfterSendRef.current = false;
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [activeSessionId, chatEnabled, loading, messages.length]);
 
   const persistCheckedTasks = (next: Set<string>): void => {
     window.localStorage.setItem(dailyTaskCheckKey(), JSON.stringify(Array.from(next)));
@@ -270,6 +282,7 @@ export function ChatDock({
       setMessages(optimisticMessages);
       updateSessionPreview(sid, optimisticMessages);
       setInput("");
+      refocusInputAfterSendRef.current = true;
       setLoading(true);
       assistantTextRef.current = "";
       const requestStartedAt = Date.now();
@@ -381,7 +394,7 @@ export function ChatDock({
       voiceInput.stop();
       return;
     }
-    voiceBaseInputRef.current = inputRef.current;
+    voiceBaseInputRef.current = inputValueRef.current;
     void voiceInput.start();
   };
 
@@ -434,7 +447,9 @@ export function ChatDock({
     [sessions]
   );
 
-  const disabled = loading || !chatEnabled;
+  const inputDisabled = !chatEnabled;
+  const controlsDisabled = loading || !chatEnabled;
+  const submitDisabled = loading || !chatEnabled;
 
   return (
     <div className="mira-workbench">
@@ -457,13 +472,16 @@ export function ChatDock({
         analysisSummary={analysisSummary}
         assessmentLabel={assessmentLabel}
         inputValue={input}
+        inputRef={inputElementRef}
         onInputChange={setInput}
         onSubmit={onSubmit}
         onToggleVoiceInput={onToggleVoiceInput}
         onToggleVoiceOutput={onToggleVoiceOutput}
         voiceOutputEnabled={voiceEnabled}
         voiceInputActive={voiceInputActive}
-        disabled={disabled}
+        inputDisabled={inputDisabled}
+        controlsDisabled={controlsDisabled}
+        submitDisabled={submitDisabled}
         loading={loading}
       />
 

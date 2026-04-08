@@ -71,13 +71,16 @@ export function ChatArea({
   analysisSummary,
   assessmentLabel,
   inputValue,
+  inputRef,
   onInputChange,
   onSubmit,
   onToggleVoiceInput,
   onToggleVoiceOutput,
   voiceOutputEnabled,
   voiceInputActive,
-  disabled,
+  inputDisabled,
+  controlsDisabled,
+  submitDisabled,
   loading
 }: ChatAreaProps): JSX.Element {
   const [panelExpanded, setPanelExpanded] = useState(true);
@@ -208,13 +211,16 @@ export function ChatArea({
           <p>你不需要整理得很完美，想到什么就说什么。</p>
           <InputBar
             value={inputValue}
+            inputRef={inputRef}
             onChange={onInputChange}
             onSubmit={onSubmit}
             onToggleVoiceInput={onToggleVoiceInput}
             onToggleVoiceOutput={onToggleVoiceOutput}
             voiceOutputEnabled={voiceOutputEnabled}
             voiceInputActive={voiceInputActive}
-            disabled={disabled}
+            inputDisabled={inputDisabled}
+            controlsDisabled={controlsDisabled}
+            submitDisabled={submitDisabled}
             loading={loading}
           />
         </div>
@@ -274,13 +280,16 @@ export function ChatArea({
           <InputBar
             compact
             value={inputValue}
+            inputRef={inputRef}
             onChange={onInputChange}
             onSubmit={onSubmit}
             onToggleVoiceInput={onToggleVoiceInput}
             onToggleVoiceOutput={onToggleVoiceOutput}
             voiceOutputEnabled={voiceOutputEnabled}
             voiceInputActive={voiceInputActive}
-            disabled={disabled}
+            inputDisabled={inputDisabled}
+            controlsDisabled={controlsDisabled}
+            submitDisabled={submitDisabled}
             loading={loading}
           />
         </div>

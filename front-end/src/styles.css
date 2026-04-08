@@ -838,6 +838,7 @@ select {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  padding-right: 14px;
   display: grid;
   align-content: start;
   gap: 12px;
@@ -1262,10 +1263,16 @@ select {
   background: rgba(229, 239, 234, 0.94);
   color: #36524d;
   border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mira-input-icon {
   height: 34px;
   min-width: 34px;
   padding: 0 10px;
-  cursor: pointer;
 }
 
 .mira-input-icon.active {
@@ -1277,6 +1284,20 @@ select {
   background: linear-gradient(135deg, #7a9d96 0%, #6f9089 100%);
   color: #f9fcff;
   font-weight: 600;
+  height: 42px;
+  width: 108px;
+  min-width: 108px;
+  max-width: 108px;
+  padding: 0 18px;
+  text-align: center;
+  white-space: nowrap;
+  flex: 0 0 108px;
+}
+
+.mira-input-icon:disabled,
+.mira-send:disabled {
+  cursor: default;
+  opacity: 0.72;
 }
 
 .mira-empty-content {
