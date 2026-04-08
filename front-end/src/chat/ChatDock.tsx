@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { api, ChatMessage, ChatSession } from "../lib/api";
 import { clearAuthToken } from "../lib/auth";
 import { emitPulse } from "../lib/pulseBus";
@@ -21,6 +20,7 @@ interface ChatDockProps {
 
 const makeId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const ENABLE_BROWSER_TTS_FALLBACK = String(import.meta.env.VITE_ENABLE_BROWSER_TTS_FALLBACK || "").toLowerCase() === "true";
+const STREAM_CHAR_INTERVAL_MS = 18;
 
 const toPreview = (messages: ChatMessage[]): string => {
   const last = messages[messages.length - 1];
@@ -82,6 +82,8 @@ export function ChatDock({
   const sendingRef = useRef(false);
   const recentSubmitRef = useRef<{ text: string; at: number } | null>(null);
   const loadSeqRef = useRef(0);
+  const streamQueueRef = useRef("");
+  const streamDrainTimerRef = useRef<number | null>(null);
 
   const voiceInputActive = voiceStatus === "recording" || voiceStatus === "connecting";
 
@@ -89,6 +91,44 @@ export function ChatDock({
     voiceTts.stop();
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
+    }
+  };
+
+  const stopStreamDrain = (): void => {
+    if (streamDrainTimerRef.current !== null) {
+      window.clearInterval(streamDrainTimerRef.current);
+      streamDrainTimerRef.current = null;
+    }
+  };
+
+  const startStreamDrain = (pendingAssistantId: string): void => {
+    if (streamDrainTimerRef.current !== null) return;
+    streamDrainTimerRef.current = window.setInterval(() => {
+      if (!streamQueueRef.current) {
+        stopStreamDrain();
+        return;
+      }
+      const nextChar = streamQueueRef.current[0];
+      streamQueueRef.current = streamQueueRef.current.slice(1);
+      assistantTextRef.current += nextChar;
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === pendingAssistantId ? { ...msg, content: assistantTextRef.current } : msg))
+      );
+      emitPulse(0.16 + Math.random() * 0.12);
+    }, STREAM_CHAR_INTERVAL_MS);
+  };
+
+  const waitForStreamDrain = async (timeoutMs = 4500): Promise<void> => {
+    const startedAt = Date.now();
+    while (streamQueueRef.current || streamDrainTimerRef.current !== null) {
+      if (Date.now() - startedAt > timeoutMs) {
+        streamQueueRef.current = "";
+        stopStreamDrain();
+        break;
+      }
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, STREAM_CHAR_INTERVAL_MS);
+      });
     }
   };
 
@@ -236,6 +276,8 @@ export function ChatDock({
       setInput("");
       setLoading(true);
       assistantTextRef.current = "";
+      streamQueueRef.current = "";
+      stopStreamDrain();
       const requestStartedAt = Date.now();
       const clientMessageId = makeId("cmid");
 
@@ -246,13 +288,8 @@ export function ChatDock({
         await api.streamMessage(sid, text, { voice: voiceEnabled, clientMessageId }, {
           onToken: (tokenText) => {
             tokenReceived = true;
-            assistantTextRef.current += tokenText;
-            emitPulse(0.16 + Math.random() * 0.12);
-            flushSync(() => {
-              setMessages((prev) =>
-                prev.map((msg) => (msg.id === pendingAssistantId ? { ...msg, content: assistantTextRef.current } : msg))
-              );
-            });
+            streamQueueRef.current += tokenText;
+            startStreamDrain(pendingAssistantId);
           },
           onPulse: (v) => emitPulse(v),
           onDone: (messageId) => {
@@ -276,6 +313,10 @@ export function ChatDock({
         }
       }
 
+      if (tokenReceived) {
+        await waitForStreamDrain();
+      }
+
       if (doneMessageId) {
         setMessages((prev) =>
           prev.map((msg) =>
@@ -297,6 +338,8 @@ export function ChatDock({
     } catch (err) {
       setError((err as Error).message || "发送失败");
     } finally {
+      streamQueueRef.current = "";
+      stopStreamDrain();
       setLoading(false);
       sendingRef.current = false;
     }

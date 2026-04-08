@@ -1016,6 +1016,7 @@ select {
   padding: 18px 18px 10px;
   display: grid;
   gap: 24px;
+  align-content: start;
 }
 
 .mira-msg {

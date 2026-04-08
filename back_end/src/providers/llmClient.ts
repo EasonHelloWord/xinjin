@@ -1,14 +1,15 @@
 import OpenAI from "openai";
 
-const LLM_BASE_URL = process.env.LLM_BASE_URL || "https://api.deepseek.com";
-const LLM_MODEL = process.env.LLM_MODEL || "deepseek-chat";
+const resolveLlmApiKey = (): string => (process.env.LLM_API_KEY || process.env.DEEPSEEK_API_KEY || "").trim();
+const LLM_BASE_URL = process.env.LLM_BASE_URL || process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com";
+const LLM_MODEL = process.env.LLM_MODEL || process.env.DEEPSEEK_MODEL || "deepseek-chat";
 
 export const hasLlmConfig = (): boolean =>
-  Boolean(process.env.LLM_API_KEY && process.env.LLM_API_KEY.trim().length > 0);
+  resolveLlmApiKey().length > 0;
 
 export const createLlmClient = (): OpenAI => {
   if (!hasLlmConfig()) throw new Error("LLM_API_KEY is missing");
-  return new OpenAI({ baseURL: LLM_BASE_URL, apiKey: process.env.LLM_API_KEY });
+  return new OpenAI({ baseURL: LLM_BASE_URL, apiKey: resolveLlmApiKey() });
 };
 
 export type LlmMessage = { role: "system" | "user" | "assistant" | "tool"; content: string; tool_call_id?: string; name?: string };

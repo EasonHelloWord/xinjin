@@ -89,24 +89,8 @@ const getSessionsByUser = async (userId: string): Promise<SessionRow[]> => {
   );
 };
 
-const getOrCreateSingleSession = async (userId: string, title?: string): Promise<SessionRow> => {
+const createSession = async (userId: string, title?: string): Promise<SessionRow> => {
   const db = await getDb();
-  const sessions = await getSessionsByUser(userId);
-  const existing = sessions[0];
-
-  if (existing) {
-    if (title && title.trim() && title.trim() !== existing.title) {
-      const nextTitle = title.trim();
-      await db.run("UPDATE sessions SET title = ? WHERE id = ?", nextTitle, existing.id);
-      return {
-        ...existing,
-        title: nextTitle
-      };
-    }
-
-    return existing;
-  }
-
   const session: SessionRow = {
     id: randomUUID(),
     user_id: userId,
@@ -235,7 +219,7 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
       }
 
       const userId = asUserId(request);
-      const session = await getOrCreateSingleSession(userId, parsed.data.title);
+      const session = await createSession(userId, parsed.data.title);
       return { sessionId: session.id };
     }
   });
@@ -246,14 +230,12 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
     preHandler: authMiddleware,
     handler: async (request: FastifyRequest, _reply: FastifyReply) => {
       const userId = asUserId(request);
-      const session = await getOrCreateSingleSession(userId);
-      return [
-        {
-          id: session.id,
-          title: session.title,
-          created_at: session.created_at
-        }
-      ];
+      const sessions = await getSessionsByUser(userId);
+      return sessions.map((session) => ({
+        id: session.id,
+        title: session.title,
+        created_at: session.created_at
+      }));
     }
   });
 
