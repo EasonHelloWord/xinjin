@@ -182,7 +182,7 @@ export interface ProfileTimeline {
 type SSEHandlers = {
   onToken?: (text: string) => void;
   onPulse?: (v: number) => void;
-  onDone?: (messageId: string) => void;
+  onDone?: (payload: { messageId: string; sessionTitle?: string }) => void;
   onError?: (message: string) => void;
 };
 
@@ -218,8 +218,13 @@ const dispatchSseEvent = (evt: SseEvent, handlers: SSEHandlers): void => {
   }
 
   if (evt.event === "done") {
-    const messageId = (parsed as { messageId?: unknown }).messageId;
-    if (typeof messageId === "string") handlers.onDone?.(messageId);
+    const { messageId, sessionTitle } = parsed as { messageId?: unknown; sessionTitle?: unknown };
+    if (typeof messageId === "string") {
+      handlers.onDone?.({
+        messageId,
+        sessionTitle: typeof sessionTitle === "string" ? sessionTitle : undefined
+      });
+    }
     return;
   }
 
@@ -259,12 +264,11 @@ const parseSseFrame = (rawFrame: string): SseEvent | null => {
 const consumeSSE = async (
   stream: ReadableStream<Uint8Array>,
   handlers: SSEHandlers
-): Promise<{ doneReceived: boolean; tokenCount: number }> => {
+): Promise<{ doneReceived: boolean }> => {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let doneReceived = false;
-  let tokenCount = 0;
 
   while (true) {
     let next: ReadableStreamReadResult<Uint8Array>;
@@ -282,7 +286,6 @@ const consumeSSE = async (
     for (const frame of frames) {
       const evt = parseSseFrame(frame);
       if (!evt) continue;
-      if (evt.event === "token") tokenCount += 1;
       if (evt.event === "done") doneReceived = true;
       dispatchSseEvent(evt, handlers);
     }
@@ -292,13 +295,12 @@ const consumeSSE = async (
   if (buffer.trim()) {
     const evt = parseSseFrame(buffer);
     if (evt) {
-      if (evt.event === "token") tokenCount += 1;
       if (evt.event === "done") doneReceived = true;
       dispatchSseEvent(evt, handlers);
     }
   }
 
-  return { doneReceived, tokenCount };
+  return { doneReceived };
 };
 
 export const api = {
@@ -324,6 +326,11 @@ export const api = {
 
   listSessions: (): Promise<ChatSession[]> => request<ChatSession[]>("/api/chat/sessions"),
 
+  autogenerateSessionTitle: (sessionId: string): Promise<{ session: ChatSession }> =>
+    request<{ session: ChatSession }>(`/api/chat/sessions/${sessionId}/title/autogen`, {
+      method: "POST"
+    }),
+
   deleteSession: (sessionId: string): Promise<{ ok: boolean }> =>
     request<{ ok: boolean }>(`/api/chat/sessions/${sessionId}`, {
       method: "DELETE"
@@ -341,8 +348,8 @@ export const api = {
     sessionId: string,
     content: string,
     options: SendOptions
-  ): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage }> =>
-    request<{ userMessage: ChatMessage; assistantMessage: ChatMessage }>(`/api/chat/sessions/${sessionId}/messages`, {
+  ): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage; session?: ChatSession }> =>
+    request<{ userMessage: ChatMessage; assistantMessage: ChatMessage; session?: ChatSession }>(`/api/chat/sessions/${sessionId}/messages`, {
       method: "POST",
       body: JSON.stringify({
         content,

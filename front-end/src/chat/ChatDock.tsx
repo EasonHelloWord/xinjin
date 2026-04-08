@@ -19,11 +19,18 @@ interface ChatDockProps {
 }
 
 const makeId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const DEFAULT_SESSION_TITLE = "新对话";
+
+const toPreviewText = (text: string): string => text.replace(/\s+/g, " ").trim().slice(0, 24);
 
 const toPreview = (messages: ChatMessage[]): string => {
-  const last = messages[messages.length - 1];
-  if (!last?.content) return "";
-  return last.content.replace(/\s+/g, " ").trim().slice(0, 24);
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== "assistant") continue;
+    if (!message.content.trim()) continue;
+    return toPreviewText(message.content);
+  }
+  return "";
 };
 
 const normalizeSessionItem = (session: ChatSession): SessionItem => ({
@@ -31,6 +38,17 @@ const normalizeSessionItem = (session: ChatSession): SessionItem => ({
   title: session.title || "新对话",
   preview: ""
 });
+
+const mergeSessionItems = (nextSessions: ChatSession[], prevSessions: SessionItem[]): SessionItem[] => {
+  const prevMap = new Map(prevSessions.map((item) => [item.id, item]));
+  return nextSessions.map((session) => {
+    const prev = prevMap.get(session.id);
+    return {
+      ...normalizeSessionItem(session),
+      preview: prev?.preview ?? ""
+    };
+  });
+};
 
 const dailyTaskCheckKey = (): string => {
   const now = new Date();
@@ -100,6 +118,7 @@ export function ChatDock({
   const refocusInputAfterSendRef = useRef(false);
   const recentSubmitRef = useRef<{ text: string; at: number } | null>(null);
   const loadSeqRef = useRef(0);
+  const previewSeqRef = useRef(0);
 
   const voiceInputActive = voiceStatus === "recording" || voiceStatus === "connecting";
 
@@ -113,9 +132,36 @@ export function ChatDock({
     }
   };
 
+  const hydrateSessionPreviews = async (sessionList: ChatSession[]): Promise<void> => {
+    const seq = ++previewSeqRef.current;
+    const previewEntries = await Promise.all(
+      sessionList.map(async (session) => {
+        try {
+          const history = await api.getMessages(session.id);
+          return [session.id, toPreview(history)] as const;
+        } catch {
+          return [session.id, ""] as const;
+        }
+      })
+    );
+
+    if (seq !== previewSeqRef.current) return;
+    const previewMap = new Map(previewEntries);
+    setSessions((prev) =>
+      prev.map((session) =>
+        !previewMap.has(session.id)
+          ? session
+          : session.preview.trim()
+            ? session
+            : { ...session, preview: previewMap.get(session.id) ?? "" }
+      )
+    );
+  };
+
   const syncSessionList = async (): Promise<ChatSession[]> => {
     const raw = await api.listSessions();
-    setSessions(raw.map(normalizeSessionItem));
+    setSessions((prev) => mergeSessionItems(raw, prev));
+    void hydrateSessionPreviews(raw);
     return raw;
   };
 
@@ -138,7 +184,6 @@ export function ChatDock({
       setSessions((prev) => [next, ...prev.filter((item) => item.id !== next.id)]);
       setActiveSessionId(next.id);
       setMessages([]);
-      void syncSessionList();
       return created.sessionId;
     } finally {
       setCreatingSession(false);
@@ -239,9 +284,36 @@ export function ChatDock({
     window.localStorage.setItem(dailyTaskCheckKey(), JSON.stringify(Array.from(next)));
   };
 
+  const updateSessionItem = (sessionId: string, patch: Partial<SessionItem>): void => {
+    setSessions((prev) => prev.map((item) => (item.id === sessionId ? { ...item, ...patch } : item)));
+  };
+
   const updateSessionPreview = (sessionId: string, nextMessages: ChatMessage[]): void => {
     const preview = toPreview(nextMessages);
-    setSessions((prev) => prev.map((item) => (item.id === sessionId ? { ...item, preview } : item)));
+    updateSessionItem(sessionId, { preview });
+  };
+
+  const updateSessionPreviewText = (sessionId: string, text: string): void => {
+    const preview = toPreviewText(text);
+    if (!preview) return;
+    updateSessionItem(sessionId, { preview });
+  };
+
+  const syncGeneratedSessionTitle = async (sessionId: string, initialTitle: string): Promise<void> => {
+    const normalizedInitial = initialTitle.trim();
+    if (normalizedInitial && normalizedInitial !== DEFAULT_SESSION_TITLE) {
+      return;
+    }
+
+    try {
+      const result = await api.autogenerateSessionTitle(sessionId);
+      const nextTitle = result.session.title?.trim() ?? "";
+      if (nextTitle && nextTitle !== DEFAULT_SESSION_TITLE) {
+        updateSessionItem(sessionId, { title: nextTitle });
+      }
+    } catch {
+      // Keep the main chat flow unaffected; title sync is best-effort only.
+    }
   };
 
   const speakWithPulse = (text: string): void => {
@@ -289,6 +361,7 @@ export function ChatDock({
       const clientMessageId = makeId("cmid");
 
       let doneMessageId = "";
+      let doneSessionTitle = "";
 
       try {
         await api.streamMessage(sid, text, { voice: voiceEnabled, clientMessageId }, {
@@ -302,8 +375,15 @@ export function ChatDock({
             });
           },
           onPulse: (v) => emitPulse(v),
-          onDone: (messageId) => {
+          onDone: ({ messageId, sessionTitle }) => {
             doneMessageId = messageId;
+            if (assistantTextRef.current.trim()) {
+              updateSessionPreviewText(sid, assistantTextRef.current);
+            }
+            if (sessionTitle?.trim()) {
+              doneSessionTitle = sessionTitle.trim();
+              updateSessionItem(sid, { title: doneSessionTitle });
+            }
           }
         });
       } catch (streamErr) {
@@ -324,6 +404,10 @@ export function ChatDock({
         );
       }
 
+      if (assistantTextRef.current.trim()) {
+        updateSessionPreviewText(sid, assistantTextRef.current);
+      }
+
       if (assistantTextRef.current && voiceEnabled) {
         speakWithPulse(assistantTextRef.current);
       }
@@ -331,6 +415,7 @@ export function ChatDock({
       const latest = await api.getMessages(sid);
       setMessages(latest);
       updateSessionPreview(sid, latest);
+      void syncGeneratedSessionTitle(sid, doneSessionTitle);
       if (assistantTextRef.current) {
         onAdviceRefresh?.({ userText: text });
       }

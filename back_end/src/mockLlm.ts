@@ -13,6 +13,27 @@ type GenerateAssistantReplyOptions = {
 };
 
 const normalizeUserText = (text: string): string => text.trim().replace(/\s+/g, " ");
+const normalizeSessionTitle = (text: string, maxLength = 18): string => {
+  const collapsed = text
+    .replace(/[\r\n]+/g, " ")
+    .replace(/^标题[:：]\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[`"'“”‘’《》「」『』【】（）()]+/, "")
+    .replace(/[`"'“”‘’《》「」『』【】（）()]+$/, "")
+    .replace(/[。！？!?,，、;；:：]+$/g, "")
+    .trim();
+
+  if (!collapsed) return "";
+  if (collapsed.length <= maxLength) return collapsed;
+  return collapsed.slice(0, maxLength).trim().replace(/[。！？!?,，、;；:：]+$/g, "");
+};
+
+const fallbackSessionTitle = (history: ChatHistoryItem[]): string => {
+  const firstUser = history.find((item) => item.role === "user");
+  const base = normalizeSessionTitle(firstUser?.content ?? "", 16);
+  return base || "新对话";
+};
 
 export const generateMockAssistantReply = (history: ChatHistoryItem[]): string => {
   const lastUser = [...history].reverse().find((item) => item.role === "user");
@@ -72,5 +93,33 @@ export const generateAssistantReply = async (
       }
     }
     return reply;
+  }
+};
+
+export const generateSessionTitle = async (history: ChatHistoryItem[]): Promise<string> => {
+  const fallback = fallbackSessionTitle(history);
+  if (!hasLlmConfig()) {
+    return fallback;
+  }
+
+  try {
+    const dialogue = history
+      .filter((item) => item.content.trim())
+      .map((item) => `${item.role === "user" ? "用户" : "助手"}：${item.content.trim()}`)
+      .join("\n");
+    const reply = await llmChat([
+      {
+        role: "system",
+        content:
+          "你要为一次中文对话生成会话标题。要求：只输出标题本身，不加引号，不加序号，不超过18个字符，尽量控制在10个汉字左右，准确概括用户本轮最核心的问题或主题。"
+      },
+      {
+        role: "user",
+        content: dialogue || "用户：新对话"
+      }
+    ]);
+    return normalizeSessionTitle(reply, 18) || fallback;
+  } catch {
+    return fallback;
   }
 };

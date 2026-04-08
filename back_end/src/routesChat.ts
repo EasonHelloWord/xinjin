@@ -4,7 +4,7 @@ import { z } from "zod";
 import { authMiddleware } from "./authMiddleware";
 import { getDb } from "./db";
 import { badRequest, forbidden, notFound } from "./errors";
-import { ChatHistoryItem, generateAssistantReply, toStreamTokens } from "./mockLlm";
+import { ChatHistoryItem, generateAssistantReply, generateSessionTitle, toStreamTokens } from "./mockLlm";
 
 const createSessionSchema = z.object({
   title: z.string().trim().min(1).max(120).optional()
@@ -32,6 +32,8 @@ type MessageRow = {
   created_at: number;
 };
 
+const DEFAULT_SESSION_TITLE = "新对话";
+const autoTitlingSessions = new Set<string>();
 let messageClientIdColumnAvailable: boolean | null = null;
 
 const ensureMessageClientIdColumn = async (): Promise<boolean> => {
@@ -94,7 +96,7 @@ const createSession = async (userId: string, title?: string): Promise<SessionRow
   const session: SessionRow = {
     id: randomUUID(),
     user_id: userId,
-    title: title?.trim() || "新对话",
+    title: title?.trim() || DEFAULT_SESSION_TITLE,
     created_at: Date.now()
   };
 
@@ -113,6 +115,16 @@ const deleteSession = async (sessionId: string): Promise<void> => {
   const db = await getDb();
   await db.run("DELETE FROM messages WHERE session_id = ?", sessionId);
   await db.run("DELETE FROM sessions WHERE id = ?", sessionId);
+};
+
+const updateSessionTitle = async (sessionId: string, title: string): Promise<SessionRow | null> => {
+  const db = await getDb();
+  await db.run("UPDATE sessions SET title = ? WHERE id = ?", title, sessionId);
+  const updated = await db.get<SessionRow>(
+    "SELECT id, user_id, title, created_at FROM sessions WHERE id = ?",
+    sessionId
+  );
+  return updated ?? null;
 };
 
 const toSessionResponse = (session: SessionRow) => ({
@@ -148,6 +160,30 @@ const writeSseEvent = (reply: FastifyReply, event: string, data: Record<string, 
   reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
   const raw = reply.raw as FastifyReply["raw"] & { flush?: () => void };
   if (typeof raw.flush === "function") raw.flush();
+};
+
+const isDefaultSessionTitle = (title: string): boolean => title.trim() === DEFAULT_SESSION_TITLE;
+
+const canGenerateTitleFromPersistedHistory = (session: SessionRow, history: ChatHistoryItem[]): boolean => {
+  if (!isDefaultSessionTitle(session.title)) return false;
+  const userCount = history.filter((item) => item.role === "user").length;
+  const assistantCount = history.filter((item) => item.role === "assistant").length;
+  return userCount >= 1 && assistantCount >= 1;
+};
+
+const generatePersistedSessionTitle = async (session: SessionRow): Promise<SessionRow> => {
+  const history = await getRecentHistory(session.id, 20);
+  if (!canGenerateTitleFromPersistedHistory(session, history)) {
+    return session;
+  }
+
+  const nextTitle = (await generateSessionTitle(history)).trim();
+  if (!nextTitle || nextTitle === DEFAULT_SESSION_TITLE) {
+    return session;
+  }
+
+  const updated = await updateSessionTitle(session.id, nextTitle);
+  return updated ?? session;
 };
 
 const setSseHeaders = (request: FastifyRequest, reply: FastifyReply): void => {
@@ -282,6 +318,33 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
   });
 
   fastify.route<{ Params: { id: string } }>({
+    method: "POST",
+    url: "/api/chat/sessions/:id/title/autogen",
+    preHandler: authMiddleware,
+    handler: async (request, _reply: FastifyReply) => {
+      const userId = asUserId(request);
+      const sessionId = request.params.id;
+      const session = await getOwnedSession(sessionId, userId);
+
+      if (autoTitlingSessions.has(sessionId)) {
+        const latest = await getOwnedSession(sessionId, userId);
+        return { session: toSessionResponse(latest) };
+      }
+
+      autoTitlingSessions.add(sessionId);
+      try {
+        const updated = await generatePersistedSessionTitle(session);
+        return { session: toSessionResponse(updated) };
+      } catch (err) {
+        fastify.log.warn({ err, sessionId }, "Failed to auto-title session");
+        return { session: toSessionResponse(session) };
+      } finally {
+        autoTitlingSessions.delete(sessionId);
+      }
+    }
+  });
+
+  fastify.route<{ Params: { id: string } }>({
     method: "DELETE",
     url: "/api/chat/sessions/:id",
     preHandler: authMiddleware,
@@ -350,7 +413,7 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
 
       const userId = asUserId(request);
       const sessionId = request.params.id;
-      await getOwnedSession(sessionId, userId);
+      const session = await getOwnedSession(sessionId, userId);
 
       const clientId = parsed.data.clientMessageId?.trim();
       const userCid = clientId ? userClientId(clientId) : undefined;
@@ -378,7 +441,8 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
             role: "assistant" as const,
             content: existingAssistant.content,
             created_at: existingAssistant.created_at
-          }
+          },
+          session: toSessionResponse(session)
         };
       }
 
@@ -401,7 +465,8 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
           role: "assistant" as const,
           content: assistantMessage.content,
           created_at: assistantMessage.created_at
-        }
+        },
+        session: toSessionResponse(session)
       };
     }
   });
@@ -418,8 +483,8 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
 
       const userId = asUserId(request);
       const sessionId = request.params.id;
-      await getOwnedSession(sessionId, userId);
       const clientId = parsed.data.clientMessageId?.trim();
+      const session = await getOwnedSession(sessionId, userId);
       const userCid = clientId ? userClientId(clientId) : undefined;
       const assistantCid = clientId ? assistantClientId(clientId) : undefined;
 
@@ -433,7 +498,7 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
           writeSseEvent(reply, "pulse", { v: randomPulse() });
           await sleep(randomIntInRange(12, 22));
         }
-        writeSseEvent(reply, "done", { messageId: existingAssistant.id });
+        writeSseEvent(reply, "done", { messageId: existingAssistant.id, sessionTitle: session.title });
         reply.raw.end();
         return;
       }
@@ -468,14 +533,15 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
         if (closed || reply.raw.writableEnded) {
           return;
         }
-        writeSseEvent(reply, "done", { messageId: assistantMessage.id });
+        writeSseEvent(reply, "done", { messageId: assistantMessage.id, sessionTitle: session.title });
         reply.raw.end();
       } catch (err) {
         fastify.log.error({ err }, "SSE stream failed");
         const recoveredAssistant =
           assistantCid ? await waitForAssistantByClientId(sessionId, assistantCid).catch(() => null) : null;
         if (recoveredAssistant && !closed && !reply.raw.writableEnded) {
-          writeSseEvent(reply, "done", { messageId: recoveredAssistant.id });
+          const recoveredSession = await getOwnedSession(sessionId, userId).catch(() => session);
+          writeSseEvent(reply, "done", { messageId: recoveredAssistant.id, sessionTitle: recoveredSession.title });
           reply.raw.end();
           return;
         }

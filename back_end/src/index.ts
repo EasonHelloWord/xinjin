@@ -11,6 +11,7 @@ import { registerMainWs } from "./wsMain";
 
 const createServer = async () => {
   const fastify = Fastify({
+    disableRequestLogging: true,
     logger: {
       transport:
         process.env.NODE_ENV === "production"

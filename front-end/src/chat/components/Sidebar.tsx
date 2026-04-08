@@ -187,7 +187,7 @@ export function Sidebar({
                     onClick={() => onSelectSession(session.id)}
                   >
                     <div className="mira-session-title">{session.title || "未命名会话"}</div>
-                    <div className="mira-session-meta">{`${session.preview || "等待开始对话"} · ${formatSessionTime(session.created_at)}`}</div>
+                    <div className="mira-session-meta">{`${session.preview || "等待 AI 回复"} · ${formatSessionTime(session.created_at)}`}</div>
                   </button>
                   <button
                     type="button"
