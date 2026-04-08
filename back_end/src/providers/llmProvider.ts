@@ -44,7 +44,8 @@ export class LlmEmotionAnalyzer implements EmotionAnalyzer {
           { role: "user", content: JSON.stringify(input) }
         ],
         tools,
-        callMcpTool
+        callMcpTool,
+        { extraBody: { enable_thinking: false } }
       );
 
       const parsed = parseJsonObject<Partial<AnalyzeOutput>>(content);
@@ -92,7 +93,8 @@ export class LlmPlanGenerator implements PlanGenerator {
           { role: "user", content: JSON.stringify(input) }
         ],
         tools,
-        callMcpTool
+        callMcpTool,
+        { extraBody: { enable_thinking: false } }
       );
 
       const parsed = parseJsonObject<Partial<PlanOutput>>(content);

@@ -90,6 +90,8 @@ export function ChatArea({
   inputRef,
   onInputChange,
   onSubmit,
+  thinkingEnabled,
+  onToggleThinking,
   onToggleVoiceInput,
   onToggleVoiceOutput,
   voiceOutputEnabled,
@@ -230,6 +232,8 @@ export function ChatArea({
             inputRef={inputRef}
             onChange={onInputChange}
             onSubmit={onSubmit}
+            thinkingEnabled={thinkingEnabled}
+            onToggleThinking={onToggleThinking}
             onToggleVoiceInput={onToggleVoiceInput}
             onToggleVoiceOutput={onToggleVoiceOutput}
             voiceOutputEnabled={voiceOutputEnabled}
@@ -303,6 +307,8 @@ export function ChatArea({
             inputRef={inputRef}
             onChange={onInputChange}
             onSubmit={onSubmit}
+            thinkingEnabled={thinkingEnabled}
+            onToggleThinking={onToggleThinking}
             onToggleVoiceInput={onToggleVoiceInput}
             onToggleVoiceOutput={onToggleVoiceOutput}
             voiceOutputEnabled={voiceOutputEnabled}

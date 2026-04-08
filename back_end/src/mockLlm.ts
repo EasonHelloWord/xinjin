@@ -1,4 +1,4 @@
-import { hasLlmConfig, llmChat, llmChatStream, TextDeltaHandler } from "./providers/llmClient";
+import { getLlmRuntimeInfo, hasLlmConfig, llmChat, llmChatStream, TextDeltaHandler } from "./providers/llmClient";
 import { listMcpTools, callMcpTool } from "./mcp/mcpClient";
 
 export interface ChatHistoryItem {
@@ -10,7 +10,10 @@ export const toStreamTokens = (text: string): string[] => Array.from(text);
 type GenerateAssistantReplyOptions = {
   signal?: AbortSignal;
   onTextDelta?: TextDeltaHandler;
+  thinkingEnabled?: boolean;
 };
+
+const TITLE_PIPELINE_MODEL = "qwen3.5-plus";
 
 const normalizeUserText = (text: string): string => text.trim().replace(/\s+/g, " ");
 const normalizeSessionTitle = (text: string, maxLength = 18): string => {
@@ -80,9 +83,11 @@ export const generateAssistantReply = async (
     for (const item of history) {
       messages.push({ role: item.role, content: item.content });
     }
+    const extraBody =
+      typeof options.thinkingEnabled === "boolean" ? { enable_thinking: options.thinkingEnabled } : undefined;
     const reply = onTextDelta
-      ? await llmChatStream(messages, tools, callMcpTool, { ...options, onTextDelta })
-      : await llmChat(messages, tools, callMcpTool, options);
+      ? await llmChatStream(messages, tools, callMcpTool, { ...options, onTextDelta, extraBody })
+      : await llmChat(messages, tools, callMcpTool, { ...options, extraBody });
     if (reply.trim()) return reply.trim();
     return generateMockAssistantReply(history);
   } catch {
@@ -117,9 +122,12 @@ export const generateSessionTitle = async (history: ChatHistoryItem[]): Promise<
         role: "user",
         content: dialogue || "用户：新对话"
       }
-    ]);
+    ], [], undefined, { model: TITLE_PIPELINE_MODEL, extraBody: { enable_thinking: false } });
     return normalizeSessionTitle(reply, 18) || fallback;
   } catch {
     return fallback;
   }
 };
+
+export const getSessionTitleRuntimeInfo = (): { baseUrl: string; model: string; hasConfig: boolean } =>
+  getLlmRuntimeInfo(TITLE_PIPELINE_MODEL);

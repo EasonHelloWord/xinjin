@@ -188,6 +188,7 @@ type SSEHandlers = {
 
 type SendOptions = {
   voice?: boolean;
+  thinking?: boolean;
   clientMessageId?: string;
 };
 
@@ -354,6 +355,7 @@ export const api = {
       body: JSON.stringify({
         content,
         voice: Boolean(options.voice),
+        thinking: Boolean(options.thinking),
         clientMessageId: options.clientMessageId
       })
     }),
@@ -380,6 +382,7 @@ export const api = {
         body: JSON.stringify({
           content,
           voice: Boolean(options.voice),
+          thinking: Boolean(options.thinking),
           clientMessageId: options.clientMessageId
         }),
         signal: ac.signal

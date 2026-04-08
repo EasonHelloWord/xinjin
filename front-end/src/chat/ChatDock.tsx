@@ -105,6 +105,7 @@ export function ChatDock({
   const [loading, setLoading] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState("");
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -364,7 +365,7 @@ export function ChatDock({
       let doneSessionTitle = "";
 
       try {
-        await api.streamMessage(sid, text, { voice: voiceEnabled, clientMessageId }, {
+        await api.streamMessage(sid, text, { voice: voiceEnabled, thinking: thinkingEnabled, clientMessageId }, {
           onToken: (tokenText) => {
             assistantTextRef.current += tokenText;
             emitPulse(0.16 + Math.random() * 0.12);
@@ -560,6 +561,8 @@ export function ChatDock({
         inputRef={inputElementRef}
         onInputChange={setInput}
         onSubmit={onSubmit}
+        thinkingEnabled={thinkingEnabled}
+        onToggleThinking={setThinkingEnabled}
         onToggleVoiceInput={onToggleVoiceInput}
         onToggleVoiceOutput={onToggleVoiceOutput}
         voiceOutputEnabled={voiceEnabled}

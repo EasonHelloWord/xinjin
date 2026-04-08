@@ -4,7 +4,7 @@ import { z } from "zod";
 import { authMiddleware } from "./authMiddleware";
 import { getDb } from "./db";
 import { badRequest, forbidden, notFound } from "./errors";
-import { ChatHistoryItem, generateAssistantReply, generateSessionTitle, toStreamTokens } from "./mockLlm";
+import { ChatHistoryItem, generateAssistantReply, generateSessionTitle, getSessionTitleRuntimeInfo, toStreamTokens } from "./mockLlm";
 
 const createSessionSchema = z.object({
   title: z.string().trim().min(1).max(120).optional()
@@ -13,6 +13,7 @@ const createSessionSchema = z.object({
 const streamMessageSchema = z.object({
   content: z.string().trim().min(1),
   voice: z.boolean().optional(),
+  thinking: z.boolean().optional(),
   clientMessageId: z.string().trim().min(8).max(128).optional()
 });
 
@@ -171,18 +172,101 @@ const canGenerateTitleFromPersistedHistory = (session: SessionRow, history: Chat
   return userCount >= 1 && assistantCount >= 1;
 };
 
-const generatePersistedSessionTitle = async (session: SessionRow): Promise<SessionRow> => {
+const generatePersistedSessionTitle = async (
+  session: SessionRow,
+  logger: FastifyInstance["log"]
+): Promise<SessionRow> => {
+  const { baseUrl, model, hasConfig } = getSessionTitleRuntimeInfo();
+  const historyStartedAt = Date.now();
   const history = await getRecentHistory(session.id, 20);
+  const historyMs = Date.now() - historyStartedAt;
+  const userCount = history.filter((item) => item.role === "user").length;
+  const assistantCount = history.filter((item) => item.role === "assistant").length;
+  const historyChars = history.reduce((sum, item) => sum + item.content.length, 0);
+  const lastUserChars = [...history].reverse().find((item) => item.role === "user")?.content.length ?? 0;
+  const lastAssistantChars = [...history].reverse().find((item) => item.role === "assistant")?.content.length ?? 0;
+
   if (!canGenerateTitleFromPersistedHistory(session, history)) {
+    logger.info(
+      {
+        sessionId: session.id,
+        historyMs,
+        userCount,
+        assistantCount,
+        historyChars,
+        lastUserChars,
+        lastAssistantChars,
+        currentTitle: session.title
+      },
+      "title autogen skipped"
+    );
     return session;
   }
 
+  logger.info(
+    {
+      sessionId: session.id,
+      model,
+      baseUrl,
+      hasConfig,
+      historyMs,
+      userCount,
+      assistantCount,
+      historyChars,
+      lastUserChars,
+      lastAssistantChars
+    },
+    "title autogen llm started"
+  );
+
+  const llmStartedAt = Date.now();
   const nextTitle = (await generateSessionTitle(history)).trim();
+  const llmMs = Date.now() - llmStartedAt;
   if (!nextTitle || nextTitle === DEFAULT_SESSION_TITLE) {
+    logger.info(
+      {
+        sessionId: session.id,
+        historyMs,
+        llmMs,
+        userCount,
+        assistantCount,
+        historyChars,
+        lastUserChars,
+        lastAssistantChars,
+        model,
+        baseUrl,
+        hasConfig,
+        generatedTitleLength: nextTitle.length,
+        generatedTitle: nextTitle || ""
+      },
+      "title autogen produced fallback title"
+    );
     return session;
   }
 
+  const saveStartedAt = Date.now();
   const updated = await updateSessionTitle(session.id, nextTitle);
+  const saveMs = Date.now() - saveStartedAt;
+  logger.info(
+    {
+      sessionId: session.id,
+      historyMs,
+      llmMs,
+      saveMs,
+      totalMs: historyMs + llmMs + saveMs,
+      userCount,
+      assistantCount,
+      historyChars,
+      lastUserChars,
+      lastAssistantChars,
+      model,
+      baseUrl,
+      hasConfig,
+      generatedTitleLength: nextTitle.length,
+      generatedTitle: nextTitle
+    },
+    "title autogen completed"
+  );
   return updated ?? session;
 };
 
@@ -322,18 +406,36 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
     url: "/api/chat/sessions/:id/title/autogen",
     preHandler: authMiddleware,
     handler: async (request, _reply: FastifyReply) => {
+      const requestStartedAt = Date.now();
       const userId = asUserId(request);
       const sessionId = request.params.id;
       const session = await getOwnedSession(sessionId, userId);
+      fastify.log.info({ sessionId, currentTitle: session.title }, "title autogen requested");
 
       if (autoTitlingSessions.has(sessionId)) {
         const latest = await getOwnedSession(sessionId, userId);
+        fastify.log.info(
+          {
+            sessionId,
+            totalMs: Date.now() - requestStartedAt,
+            currentTitle: latest.title
+          },
+          "title autogen deduped"
+        );
         return { session: toSessionResponse(latest) };
       }
 
       autoTitlingSessions.add(sessionId);
       try {
-        const updated = await generatePersistedSessionTitle(session);
+        const updated = await generatePersistedSessionTitle(session, fastify.log);
+        fastify.log.info(
+          {
+            sessionId,
+            totalMs: Date.now() - requestStartedAt,
+            finalTitle: updated.title
+          },
+          "title autogen request finished"
+        );
         return { session: toSessionResponse(updated) };
       } catch (err) {
         fastify.log.warn({ err, sessionId }, "Failed to auto-title session");
@@ -450,7 +552,9 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
       const userMessage = existingUser || (await insertMessage(sessionId, "user", parsed.data.content, userCid));
 
       const history = await getRecentHistory(sessionId, 20);
-      const assistantText = await generateAssistantReply(history);
+      const assistantText = await generateAssistantReply(history, {
+        thinkingEnabled: parsed.data.thinking
+      });
       const assistantMessage = await insertMessage(sessionId, "assistant", assistantText, assistantCid);
 
       return {
@@ -518,6 +622,7 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
         const history = await getRecentHistory(sessionId, 20);
         let streamedText = "";
         const assistantText = await generateAssistantReply(history, {
+          thinkingEnabled: parsed.data.thinking,
           onTextDelta: async (token) => {
             streamedText += token;
             if (closed || reply.raw.writableEnded) {

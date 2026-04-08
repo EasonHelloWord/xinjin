@@ -6,6 +6,8 @@ export function InputBar({
   inputRef,
   onChange,
   onSubmit,
+  thinkingEnabled,
+  onToggleThinking,
   onToggleVoiceInput,
   onToggleVoiceOutput,
   voiceOutputEnabled,
@@ -31,6 +33,15 @@ export function InputBar({
         placeholder="和小镜聊聊现在发生了什么..."
         disabled={inputDisabled}
       />
+      <button
+        type="button"
+        className={`mira-input-icon ${thinkingEnabled ? "active" : ""}`}
+        onClick={() => onToggleThinking(!thinkingEnabled)}
+        disabled={controlsDisabled}
+        title="深度思考"
+      >
+        {thinkingEnabled ? "思" : "快"}
+      </button>
       <button
         type="button"
         className={`mira-input-icon ${voiceInputActive ? "active" : ""}`}

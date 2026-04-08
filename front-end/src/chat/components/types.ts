@@ -46,6 +46,8 @@ export interface ChatAreaProps {
   inputRef: RefObject<HTMLInputElement>;
   onInputChange: (value: string) => void;
   onSubmit: () => void;
+  thinkingEnabled: boolean;
+  onToggleThinking: (enabled: boolean) => void;
   onToggleVoiceInput: () => void;
   onToggleVoiceOutput: (enabled: boolean) => void;
   voiceOutputEnabled: boolean;
@@ -61,6 +63,8 @@ export interface InputBarProps {
   inputRef: RefObject<HTMLInputElement>;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  thinkingEnabled: boolean;
+  onToggleThinking: (enabled: boolean) => void;
   onToggleVoiceInput: () => void;
   onToggleVoiceOutput: (enabled: boolean) => void;
   voiceOutputEnabled: boolean;

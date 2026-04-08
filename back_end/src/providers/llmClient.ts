@@ -8,6 +8,12 @@ const MCP_DEBUG = process.env.MCP_DEBUG === "1";
 export const hasLlmConfig = (): boolean =>
   resolveLlmApiKey().length > 0;
 
+export const getLlmRuntimeInfo = (modelOverride?: string): { baseUrl: string; model: string; hasConfig: boolean } => ({
+  baseUrl: LLM_BASE_URL,
+  model: (modelOverride || "").trim() || LLM_MODEL,
+  hasConfig: hasLlmConfig()
+});
+
 export const createLlmClient = (): OpenAI => {
   if (!hasLlmConfig()) throw new Error("LLM_API_KEY is missing");
   return new OpenAI({ baseURL: LLM_BASE_URL, apiKey: resolveLlmApiKey() });
@@ -19,6 +25,8 @@ export type TextDeltaHandler = (text: string) => Promise<void> | void;
 type LlmChatOptions = {
   signal?: AbortSignal;
   onTextDelta?: TextDeltaHandler;
+  model?: string;
+  extraBody?: Record<string, unknown>;
 };
 type StreamToolCall = {
   id: string;
@@ -113,8 +121,9 @@ export const llmChat = async (
 
   for (let i = 0; i < 8; i++) {
     const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
-      model: LLM_MODEL,
+      model: (options.model || "").trim() || LLM_MODEL,
       messages: msgs,
+      ...(options.extraBody ?? {}),
       ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {})
     };
 
@@ -163,9 +172,10 @@ export const llmChatStream = async (
 
   for (let i = 0; i < 8; i++) {
     const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
-      model: LLM_MODEL,
+      model: (options.model || "").trim() || LLM_MODEL,
       messages: msgs,
       stream: true,
+      ...(options.extraBody ?? {}),
       ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {})
     };
 
