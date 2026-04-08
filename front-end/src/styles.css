@@ -813,12 +813,51 @@ select {
   transform: translateY(-1px);
 }
 
+.mira-session-groups-wrap {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
 .mira-session-groups {
+  flex: 1;
   min-height: 0;
   overflow: auto;
   display: grid;
   align-content: start;
   gap: 12px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.mira-session-groups::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.mira-session-scrollbar {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  bottom: 6px;
+  width: 7px;
+  border-radius: 999px;
+  background: rgba(180, 197, 188, 0.12);
+  pointer-events: auto;
+}
+
+.mira-session-scrollbar__thumb {
+  width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(127, 152, 143, 0.78) 0%, rgba(112, 137, 128, 0.92) 100%);
+  box-shadow: 0 1px 4px rgba(82, 106, 97, 0.16);
+  cursor: grab;
+}
+
+.mira-session-scrollbar__thumb:active {
+  cursor: grabbing;
 }
 
 .mira-session-group {
@@ -1064,6 +1103,50 @@ select {
   flex-direction: column;
   align-items: stretch;
   gap: 14px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.mira-message-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.mira-message-list-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.mira-message-list-wrap .mira-message-list {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.mira-message-scrollbar {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  bottom: 8px;
+  width: 7px;
+  border-radius: 999px;
+  background: rgba(180, 197, 188, 0.12);
+  pointer-events: auto;
+}
+
+.mira-message-scrollbar__thumb {
+  width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(127, 152, 143, 0.78) 0%, rgba(112, 137, 128, 0.92) 100%);
+  box-shadow: 0 1px 4px rgba(82, 106, 97, 0.16);
+  cursor: grab;
+}
+
+.mira-message-scrollbar__thumb:active {
+  cursor: grabbing;
 }
 
 .mira-msg {
@@ -1105,6 +1188,23 @@ select {
   background: rgba(244, 243, 236, 0.92);
   color: #33443b;
   border-bottom-left-radius: 11px;
+}
+
+.mira-msg-token-fade {
+  display: inline;
+  animation: mira-token-fade-in 0.26s ease;
+}
+
+@keyframes mira-token-fade-in {
+  from {
+    opacity: 0;
+    filter: blur(1.5px);
+  }
+
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
 }
 
 .mira-chat-input-dock {

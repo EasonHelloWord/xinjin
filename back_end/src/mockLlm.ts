@@ -1,4 +1,4 @@
-import { hasLlmConfig, llmChat } from "./providers/llmClient";
+import { hasLlmConfig, llmChat, llmChatStream, TextDeltaHandler } from "./providers/llmClient";
 import { listMcpTools, callMcpTool } from "./mcp/mcpClient";
 
 export interface ChatHistoryItem {
@@ -7,6 +7,10 @@ export interface ChatHistoryItem {
 }
 
 export const toStreamTokens = (text: string): string[] => Array.from(text);
+type GenerateAssistantReplyOptions = {
+  signal?: AbortSignal;
+  onTextDelta?: TextDeltaHandler;
+};
 
 const normalizeUserText = (text: string): string => text.trim().replace(/\s+/g, " ");
 
@@ -22,9 +26,26 @@ export const generateMockAssistantReply = (history: ChatHistoryItem[]): string =
   ].join("\n");
 };
 
-export const generateAssistantReply = async (history: ChatHistoryItem[]): Promise<string> => {
+export const generateAssistantReply = async (
+  history: ChatHistoryItem[],
+  options: GenerateAssistantReplyOptions = {}
+): Promise<string> => {
+  let emittedAnyToken = false;
+  const onTextDelta = options.onTextDelta
+    ? async (text: string): Promise<void> => {
+        emittedAnyToken = true;
+        await options.onTextDelta?.(text);
+      }
+    : undefined;
+
   if (!hasLlmConfig()) {
-    return generateMockAssistantReply(history);
+    const reply = generateMockAssistantReply(history);
+    if (onTextDelta) {
+      for (const token of toStreamTokens(reply)) {
+        await onTextDelta(token);
+      }
+    }
+    return reply;
   }
 
   try {
@@ -38,10 +59,18 @@ export const generateAssistantReply = async (history: ChatHistoryItem[]): Promis
     for (const item of history) {
       messages.push({ role: item.role, content: item.content });
     }
-    const reply = await llmChat(messages, tools, callMcpTool);
+    const reply = onTextDelta
+      ? await llmChatStream(messages, tools, callMcpTool, { ...options, onTextDelta })
+      : await llmChat(messages, tools, callMcpTool, options);
     if (reply.trim()) return reply.trim();
     return generateMockAssistantReply(history);
   } catch {
-    return generateMockAssistantReply(history);
+    const reply = generateMockAssistantReply(history);
+    if (onTextDelta && !emittedAnyToken) {
+      for (const token of toStreamTokens(reply)) {
+        await onTextDelta(token);
+      }
+    }
+    return reply;
   }
 };

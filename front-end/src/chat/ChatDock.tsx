@@ -58,6 +58,21 @@ const findRecoveredAssistant = (history: ChatMessage[], userText: string, startA
   return null;
 };
 
+const recoverAssistantFromHistory = async (
+  sessionId: string,
+  userText: string,
+  startAt: number,
+  attempts = 8
+): Promise<ChatMessage | null> => {
+  for (let i = 0; i < attempts; i++) {
+    const history = await api.getMessages(sessionId);
+    const recovered = findRecoveredAssistant(history, userText, startAt);
+    if (recovered) return recovered;
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+  }
+  return null;
+};
+
 export function ChatDock({
   onLogout,
   chatEnabled,
@@ -251,12 +266,10 @@ export function ChatDock({
       const clientMessageId = makeId("cmid");
 
       let doneMessageId = "";
-      let tokenReceived = false;
 
       try {
         await api.streamMessage(sid, text, { voice: voiceEnabled, clientMessageId }, {
           onToken: (tokenText) => {
-            tokenReceived = true;
             assistantTextRef.current += tokenText;
             emitPulse(0.16 + Math.random() * 0.12);
             flushSync(() => {
@@ -271,17 +284,10 @@ export function ChatDock({
           }
         });
       } catch (streamErr) {
-        if (!tokenReceived) {
-          const history = await api.getMessages(sid);
-          const recovered = findRecoveredAssistant(history, text, requestStartedAt);
-          if (recovered) {
-            assistantTextRef.current = recovered.content;
-            doneMessageId = recovered.id;
-          } else {
-            const fallback = await api.sendMessageOnce(sid, text, { voice: voiceEnabled, clientMessageId });
-            assistantTextRef.current = fallback.assistantMessage.content;
-            doneMessageId = fallback.assistantMessage.id;
-          }
+        const recovered = await recoverAssistantFromHistory(sid, text, requestStartedAt);
+        if (recovered) {
+          assistantTextRef.current = recovered.content;
+          doneMessageId = recovered.id;
         } else {
           throw streamErr;
         }

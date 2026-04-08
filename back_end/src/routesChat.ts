@@ -150,6 +150,23 @@ const writeSseEvent = (reply: FastifyReply, event: string, data: Record<string, 
   if (typeof raw.flush === "function") raw.flush();
 };
 
+const setSseHeaders = (request: FastifyRequest, reply: FastifyReply): void => {
+  const origin = typeof request.headers.origin === "string" ? request.headers.origin : "";
+  reply.raw.statusCode = 200;
+  reply.raw.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  reply.raw.setHeader("Cache-Control", "no-cache, no-transform");
+  reply.raw.setHeader("Connection", "keep-alive");
+  reply.raw.setHeader("X-Accel-Buffering", "no");
+  if (origin) {
+    reply.raw.setHeader("Vary", "Origin");
+    reply.raw.setHeader("Access-Control-Allow-Origin", origin);
+    reply.raw.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+  if (typeof reply.raw.flushHeaders === "function") {
+    reply.raw.flushHeaders();
+  }
+};
+
 const randomIntInRange = (min: number, max: number): number =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
@@ -157,6 +174,20 @@ const randomPulse = (): number => Number((0.15 + Math.random() * 0.3).toFixed(3)
 
 const userClientId = (clientMessageId: string): string => `${clientMessageId}:u`;
 const assistantClientId = (clientMessageId: string): string => `${clientMessageId}:a`;
+
+const waitForAssistantByClientId = async (
+  sessionId: string,
+  clientId: string,
+  timeoutMs = 3000
+): Promise<MessageRow | null> => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const existing = await getMessageByClientId(sessionId, clientId);
+    if (existing) return existing;
+    await sleep(150);
+  }
+  return getMessageByClientId(sessionId, clientId);
+};
 
 const getMessageByClientId = async (sessionId: string, clientId: string): Promise<MessageRow | null> => {
   if (!(await ensureMessageClientIdColumn())) {
@@ -396,14 +427,7 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
       if (existingAssistant) {
         const tokens = toStreamTokens(existingAssistant.content);
         reply.hijack();
-        reply.raw.statusCode = 200;
-        reply.raw.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-        reply.raw.setHeader("Cache-Control", "no-cache, no-transform");
-        reply.raw.setHeader("Connection", "keep-alive");
-        reply.raw.setHeader("X-Accel-Buffering", "no");
-        if (typeof reply.raw.flushHeaders === "function") {
-          reply.raw.flushHeaders();
-        }
+        setSseHeaders(request, reply);
         for (const token of tokens) {
           writeSseEvent(reply, "token", { text: token });
           writeSseEvent(reply, "pulse", { v: randomPulse() });
@@ -416,14 +440,7 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
 
       const existingUser = userCid ? await getMessageByClientId(sessionId, userCid) : null;
       reply.hijack();
-      reply.raw.statusCode = 200;
-      reply.raw.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-      reply.raw.setHeader("Cache-Control", "no-cache, no-transform");
-      reply.raw.setHeader("Connection", "keep-alive");
-      reply.raw.setHeader("X-Accel-Buffering", "no");
-      if (typeof reply.raw.flushHeaders === "function") {
-        reply.raw.flushHeaders();
-      }
+      setSseHeaders(request, reply);
       writeSseEvent(reply, "pulse", { v: randomPulse() });
 
       let closed = false;
@@ -434,25 +451,34 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
       try {
         const userMessage = existingUser || (await insertMessage(sessionId, "user", parsed.data.content, userCid));
         const history = await getRecentHistory(sessionId, 20);
-        const assistantText = await generateAssistantReply(history);
-        const tokens = toStreamTokens(assistantText);
-
-        for (const token of tokens) {
-          if (closed || reply.raw.writableEnded) {
-            return;
+        let streamedText = "";
+        const assistantText = await generateAssistantReply(history, {
+          onTextDelta: async (token) => {
+            streamedText += token;
+            if (closed || reply.raw.writableEnded) {
+              return;
+            }
+            writeSseEvent(reply, "token", { text: token });
+            writeSseEvent(reply, "pulse", { v: randomPulse() });
           }
+        });
+        const finalAssistantText = assistantText || streamedText;
+        const assistantMessage = await insertMessage(sessionId, "assistant", finalAssistantText, assistantCid);
 
-          writeSseEvent(reply, "token", { text: token });
-          writeSseEvent(reply, "pulse", { v: randomPulse() });
-          await sleep(randomIntInRange(30, 60));
+        if (closed || reply.raw.writableEnded) {
+          return;
         }
-
-        const assistantMessage = await insertMessage(sessionId, "assistant", assistantText, assistantCid);
-
         writeSseEvent(reply, "done", { messageId: assistantMessage.id });
         reply.raw.end();
       } catch (err) {
         fastify.log.error({ err }, "SSE stream failed");
+        const recoveredAssistant =
+          assistantCid ? await waitForAssistantByClientId(sessionId, assistantCid).catch(() => null) : null;
+        if (recoveredAssistant && !closed && !reply.raw.writableEnded) {
+          writeSseEvent(reply, "done", { messageId: recoveredAssistant.id });
+          reply.raw.end();
+          return;
+        }
         if (!closed && !reply.raw.writableEnded) {
           writeSseEvent(reply, "error", { message: "Stream interrupted" });
           reply.raw.end();
