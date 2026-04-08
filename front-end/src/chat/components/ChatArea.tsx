@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { InputBar } from "./InputBar";
 import { ChatAreaProps } from "./types";
 
@@ -6,6 +8,25 @@ type AnimatedSegment = {
   id: string;
   text: string;
 };
+
+function MarkdownMessage({ text }: { text: string }): JSX.Element {
+  return (
+    <div className="mira-markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ href, children, ...props }) => (
+            <a href={href} target="_blank" rel="noreferrer noopener" {...props}>
+              {children}
+            </a>
+          )
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}
 
 function StreamingAssistantText({ text }: { text: string }): JSX.Element {
   const [settledText, setSettledText] = useState(text);
@@ -54,15 +75,10 @@ function StreamingAssistantText({ text }: { text: string }): JSX.Element {
     timeoutIdsRef.current.push(timeoutId);
   }, [text]);
 
+  const pendingText = pendingSegments.map((segment) => segment.text).join("");
+
   return (
-    <>
-      {settledText}
-      {pendingSegments.map((segment) => (
-        <span key={segment.id} className="mira-msg-token-fade">
-          {segment.text}
-        </span>
-      ))}
-    </>
+    <MarkdownMessage text={settledText + pendingText} />
   );
 }
 
@@ -257,7 +273,11 @@ export function ChatArea({
             {messages.map((msg) => (
               <article key={msg.id} className={`mira-msg ${msg.role === "user" ? "user" : "assistant"}`}>
                 <div className="mira-msg-bubble">
-                  {msg.role === "assistant" ? <StreamingAssistantText text={msg.content || "..."} /> : msg.content || "..."}
+                  {msg.role === "assistant" ? (
+                    <StreamingAssistantText text={msg.content || "..."} />
+                  ) : (
+                    <MarkdownMessage text={msg.content || "..."} />
+                  )}
                 </div>
               </article>
             ))}

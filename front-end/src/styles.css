@@ -1186,8 +1186,7 @@ select {
   min-height: 0;
   padding: 15px 18px;
   font-size: 14px;
-  line-height: 1.9;
-  white-space: pre-wrap;
+  line-height: 1.75;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -1202,6 +1201,92 @@ select {
   background: rgba(244, 243, 236, 0.92);
   color: #33443b;
   border-bottom-left-radius: 11px;
+}
+
+.mira-markdown > :first-child {
+  margin-top: 0;
+}
+
+.mira-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.mira-markdown p,
+.mira-markdown ul,
+.mira-markdown ol,
+.mira-markdown blockquote,
+.mira-markdown pre,
+.mira-markdown table,
+.mira-markdown hr {
+  margin: 0.5em 0;
+}
+
+.mira-markdown h1,
+.mira-markdown h2,
+.mira-markdown h3,
+.mira-markdown h4,
+.mira-markdown h5,
+.mira-markdown h6 {
+  margin: 0.7em 0 0.35em;
+  line-height: 1.4;
+}
+
+.mira-markdown ul,
+.mira-markdown ol {
+  padding-left: 1.25em;
+}
+
+.mira-markdown code {
+  font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+  background: rgba(56, 73, 65, 0.1);
+  border-radius: 6px;
+  padding: 0.15em 0.4em;
+}
+
+.mira-markdown pre {
+  background: rgba(47, 59, 53, 0.93);
+  color: #eaf1ec;
+  border-radius: 10px;
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+
+.mira-markdown pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: 0.86em;
+}
+
+.mira-markdown blockquote {
+  margin-left: 0;
+  margin-right: 0;
+  padding: 0.25em 0 0.25em 0.9em;
+  border-left: 3px solid rgba(90, 116, 102, 0.4);
+  color: rgba(53, 68, 59, 0.9);
+}
+
+.mira-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.94em;
+}
+
+.mira-markdown th,
+.mira-markdown td {
+  border: 1px solid rgba(94, 113, 104, 0.26);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.mira-markdown a {
+  color: #28689a;
+  text-decoration-thickness: 1px;
+}
+
+.mira-markdown a:hover {
+  text-decoration: underline;
 }
 
 .mira-msg-token-fade {
