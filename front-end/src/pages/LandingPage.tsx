@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { WaveAnimation } from "../components/WaveAnimation";
 import "../landing.css";
 
 interface LandingPageProps {
@@ -156,11 +155,16 @@ const DEFAULT_CONTENT: LandingContent = {
   footerTagline: "用心照见自己，在陪伴中慢慢变得更稳。"
 };
 
+const TYPEWRITER_LINES = ["文字文字文字", "先慢慢说，Mira 在听。", "我们可以从一次呼吸开始。"];
+
 export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JSX.Element {
   const navigate = useNavigate();
   const [content, setContent] = useState<LandingContent>(DEFAULT_CONTENT);
   const heroTitleRef = useRef<HTMLHeadingElement | null>(null);
   const [heroTitleSize, setHeroTitleSize] = useState<number | null>(null);
+  const [typedLine, setTypedLine] = useState("");
+  const [lineIndex, setLineIndex] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -252,6 +256,37 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
     window.addEventListener("resize", computeFont);
     return () => window.removeEventListener("resize", computeFont);
   }, [content.heroTitle]);
+
+  useEffect(() => {
+    const current = TYPEWRITER_LINES[lineIndex] ?? "";
+    const doneTyping = typedLine === current;
+    const doneDeleting = typedLine.length === 0;
+
+    let delay = isDeleting ? 95 : 170;
+    if (!isDeleting && doneTyping) delay = 2200;
+    if (isDeleting && doneDeleting) delay = 420;
+
+    const timer = window.setTimeout(() => {
+      if (!isDeleting && doneTyping) {
+        setIsDeleting(true);
+        return;
+      }
+
+      if (isDeleting && doneDeleting) {
+        setIsDeleting(false);
+        setLineIndex((prev) => (prev + 1) % TYPEWRITER_LINES.length);
+        return;
+      }
+
+      if (isDeleting) {
+        setTypedLine(current.slice(0, typedLine.length - 1));
+      } else {
+        setTypedLine(current.slice(0, typedLine.length + 1));
+      }
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [typedLine, lineIndex, isDeleting]);
 
   const enterMind = (): void => {
     if (isAuthenticated) {
@@ -363,8 +398,11 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
               </div>
               <h3>心境 Mira Companion</h3>
               <p>今晚你想先被倾听，还是先放松下来？</p>
-              <div className="kv-wave" aria-hidden="true">
-                <WaveAnimation speed={1} amplitude={18} color="#78b8bb" />
+              <div className="kv-wave" aria-label="Mira 打字机动态文案">
+                <p className="kv-typewriter">
+                  <span>{typedLine || "\u00A0"}</span>
+                  <span className="kv-caret" aria-hidden="true" />
+                </p>
               </div>
               <div className="kv-tags">
                 {content.kvTags.map((tag) => (
