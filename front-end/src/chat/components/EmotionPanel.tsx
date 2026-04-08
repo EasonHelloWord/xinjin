@@ -12,7 +12,7 @@ const SIX_DIM_ITEMS = [
 export function EmotionPanel({ sixDimAdvice, microTasks, checkedTaskIds, onToggleTask }: EmotionPanelProps): JSX.Element {
   return (
     <aside className="mira-emotion-panel">
-      <section className="mira-panel-card">
+      <section className="mira-panel-card six-dim">
         <header>
           <h3>六维调节</h3>
           <span>今天给自己一点温和节奏</span>
@@ -27,7 +27,7 @@ export function EmotionPanel({ sixDimAdvice, microTasks, checkedTaskIds, onToggl
         </div>
       </section>
 
-      <section className="mira-panel-card">
+      <section className="mira-panel-card micro-tasks">
         <header>
           <h3>今日微任务</h3>
           <span>完成一个也算前进</span>
