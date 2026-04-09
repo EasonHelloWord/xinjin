@@ -793,6 +793,14 @@ select {
   letter-spacing: 0.02em;
 }
 
+.mira-brand-button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
 .mira-sidebar-head {
   display: grid;
   gap: 10px;

@@ -124,8 +124,10 @@ const evaluateSafetySignals = (textRaw: string): {
   const positiveHits = containsAny(text, POSITIVE_WORDS);
   const exclamationCount = (text.match(/[!！?？]/g) || []).length;
   const volatilitySignal = negativeHits > 0 && positiveHits > 0;
-  const highArousal = exclamationCount >= 3;
-  const strongVolatility = volatilitySignal && (highArousal || negativeHits >= 2 || positiveHits >= 2);
+  const highArousal = exclamationCount >= 4;
+  const strongVolatility =
+    volatilitySignal &&
+    ((negativeHits >= 3 && positiveHits >= 2) || (highArousal && negativeHits >= 2 && positiveHits >= 1));
 
   if (dangerHits > 0) {
     return {
@@ -149,7 +151,7 @@ const evaluateSafetySignals = (textRaw: string): {
     };
   }
 
-  if (negativeHits >= 3 && highArousal) {
+  if (negativeHits >= 4 && highArousal) {
     return {
       minLevel: "moderate",
       appendSummary: "文本中持续出现高负荷情绪信号，建议提高警惕并增加支持资源。",
@@ -162,6 +164,55 @@ const evaluateSafetySignals = (textRaw: string): {
     forceStateTypeMixed: false,
     confidencePenalty: 0
   };
+};
+
+const EMOTION_TAG_ALIAS: Record<string, string> = {
+  anxiety: "焦虑",
+  anxious: "焦虑",
+  stress: "压力",
+  stressed: "压力",
+  fatigue: "疲惫",
+  tired: "疲惫",
+  numbness: "麻木",
+  numb: "麻木",
+  irritability: "烦躁",
+  anger: "愤怒",
+  angry: "愤怒",
+  sadness: "悲伤",
+  sad: "悲伤",
+  fear: "害怕",
+  panic: "恐慌",
+  low_stability: "波动"
+};
+
+const toChineseEmotionTag = (raw: string): string => {
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) return "";
+  if (EMOTION_TAG_ALIAS[normalized]) return EMOTION_TAG_ALIAS[normalized];
+  if (/[\u4e00-\u9fa5]/.test(raw)) return raw.trim().slice(0, 8);
+  return "";
+};
+
+const normalizeEmotionTags = (tags: string[]): string[] => {
+  const next: string[] = [];
+  const seen = new Set<string>();
+  for (const tag of tags) {
+    const cn = toChineseEmotionTag(tag);
+    if (!cn || seen.has(cn)) continue;
+    seen.add(cn);
+    next.push(cn);
+    if (next.length >= 6) break;
+  }
+  if (next.length === 0) next.push("波动");
+  return next;
+};
+
+const HIGH_RISK_NOTICE_HINTS = ["高危", "危机", "自伤", "轻生", "自杀", "急救", "热线", "立即", "尽快"];
+const shouldDisplayRiskNotice = (notice: string | undefined, level: UserLevel, fromSafety: boolean): boolean => {
+  if (!notice || !notice.trim()) return false;
+  if (fromSafety) return true;
+  if (level === "severe") return true;
+  return HIGH_RISK_NOTICE_HINTS.some((word) => notice.includes(word));
 };
 
 const asUserId = (request: FastifyRequest): string => {
@@ -426,11 +477,16 @@ export const registerMindRoutes = async (fastify: FastifyInstance): Promise<void
         safety.appendSummary && !analyzeOut.summary.includes(safety.appendSummary)
           ? `${analyzeOut.summary} ${safety.appendSummary}`
           : analyzeOut.summary;
+      const normalizedEmotionTags = normalizeEmotionTags(analyzeOut.emotionTags);
       const confidence: AdviceConfidence = {
         state: Math.max(0, Math.min(1, (analyzeOut.stateConfidence ?? 0.65) - safety.confidencePenalty)),
         tcm: Math.max(0, Math.min(1, (planOut.tcmConfidence ?? 0.68) - safety.confidencePenalty * 0.6)),
         western: Math.max(0, Math.min(1, (planOut.westernConfidence ?? 0.68) - safety.confidencePenalty * 0.6))
       };
+      const mergedRiskNotice = safety.riskNotice ?? planOut.riskNotice;
+      const finalRiskNotice = shouldDisplayRiskNotice(mergedRiskNotice, level, Boolean(safety.riskNotice))
+        ? mergedRiskNotice
+        : null;
 
       const id = randomUUID();
       const createdAt = Date.now();
@@ -451,7 +507,7 @@ export const registerMindRoutes = async (fastify: FastifyInstance): Promise<void
         parsed.data.sleepHours ?? null,
         parsed.data.fatigueLevel ?? null,
         parsed.data.socialWillingness ?? null,
-        JSON.stringify(analyzeOut.emotionTags),
+        JSON.stringify(normalizedEmotionTags),
         JSON.stringify(analyzeOut.contradictions),
         finalSummary,
         finalStateType,
@@ -459,7 +515,7 @@ export const registerMindRoutes = async (fastify: FastifyInstance): Promise<void
         JSON.stringify([planOut.sixDimAdvice.behavior, planOut.sixDimAdvice.relation, planOut.sixDimAdvice.environment]),
         JSON.stringify(planOut.microTasks),
         JSON.stringify(confidence),
-        safety.riskNotice ?? planOut.riskNotice ?? null,
+        finalRiskNotice,
         createdAt
       );
 
@@ -469,13 +525,14 @@ export const registerMindRoutes = async (fastify: FastifyInstance): Promise<void
         score: assessment?.score ?? null,
         level,
         ...analyzeOut,
+        emotionTags: normalizedEmotionTags,
         summary: finalSummary,
         stateType: finalStateType,
         ...planOut,
         tcmAdvice: [planOut.sixDimAdvice.body, planOut.sixDimAdvice.emotion, planOut.sixDimAdvice.cognition],
         westernAdvice: [planOut.sixDimAdvice.behavior, planOut.sixDimAdvice.relation, planOut.sixDimAdvice.environment],
         confidence,
-        riskNotice: safety.riskNotice ?? planOut.riskNotice,
+        riskNotice: finalRiskNotice,
         createdAt
       };
     }

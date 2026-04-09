@@ -39,7 +39,7 @@ export class LlmEmotionAnalyzer implements EmotionAnalyzer {
           {
             role: "system",
             content:
-              "你是心理状态结构化分析器。遵循安全优先：对强烈负面情绪、风险表达、短时情绪反转保持敏感，不要轻率归为正常。请只输出 JSON，不要解释。字段：emotionTags(string[]), contradictions(string[]), summary(string), stateType(必须是 sensory_overload|emotional_block|mixed_fluctuation), stateConfidence(number,0-1)"
+              "你是心理状态结构化分析器。遵循安全优先：对强烈负面情绪、风险表达、短时情绪反转保持敏感，不要轻率归为正常。请只输出 JSON，不要解释。字段：emotionTags(string[])、contradictions(string[])、summary(string)、stateType(必须是 sensory_overload|emotional_block|mixed_fluctuation|stable_normal)、stateConfidence(number,0-1)。要求：emotionTags 必须使用中文短词（例如 焦虑/疲惫/烦躁/麻木/平静），不要英文。"
           },
           { role: "user", content: JSON.stringify(input) }
         ],
@@ -54,7 +54,8 @@ export class LlmEmotionAnalyzer implements EmotionAnalyzer {
       const stateType =
         parsed.stateType === "sensory_overload" ||
         parsed.stateType === "emotional_block" ||
-        parsed.stateType === "mixed_fluctuation"
+        parsed.stateType === "mixed_fluctuation" ||
+        parsed.stateType === "stable_normal"
           ? parsed.stateType
           : undefined;
 

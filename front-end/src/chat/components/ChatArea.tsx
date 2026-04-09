@@ -255,6 +255,9 @@ export function ChatArea({
           <span className="mira-eval-headline">{`◌ ${analysisSummary.stateTypeLabel} · ${analysisSummary.levelLabel}`}</span>
           <span>{panelExpanded ? "收起" : "展开"}</span>
         </button>
+        {analysisSummary.riskNotice && !panelExpanded && (
+          <div className="mira-risk-hint">{`⚠ ${analysisSummary.riskNotice}`}</div>
+        )}
         {panelExpanded && (
           <div className="mira-eval-detail">
             {assessmentLabel && <p>{`评估：${assessmentLabel}`}</p>}

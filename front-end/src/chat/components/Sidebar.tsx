@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { SessionItem, SidebarProps } from "./types";
 
 const formatSessionTime = (timestamp: number): string => {
@@ -54,6 +55,7 @@ export function Sidebar({
   creating,
   deletingSessionId
 }: SidebarProps): JSX.Element {
+  const navigate = useNavigate();
   const sessionGroupsRef = useRef<HTMLDivElement | null>(null);
   const thumbDragRef = useRef<{ startY: number; startScrollTop: number } | null>(null);
   const [scrollbarState, setScrollbarState] = useState({
@@ -162,7 +164,9 @@ export function Sidebar({
   return (
     <aside className="mira-sidebar">
       <div className="mira-sidebar-head">
-        <div className="mira-brand">{"心境 Mira"}</div>
+        <button type="button" className="mira-brand mira-brand-button" onClick={() => navigate("/")}>
+          {"心境 Mira"}
+        </button>
         <input
           className="mira-search"
           value={search}

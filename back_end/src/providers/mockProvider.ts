@@ -17,23 +17,34 @@ const pickStateType = (input: AnalyzeInput): AnalyzeOutput["stateType"] => {
   const hasMixSignal =
     (typeof input.sleepHours === "number" && input.sleepHours >= 7.5 && (input.fatigueLevel ?? 3) >= 4) ||
     ((input.socialWillingness ?? 3) <= 2 && (input.fatigueLevel ?? 3) >= 4);
+  const hasStableSignal =
+    text.includes("平静") ||
+    text.includes("稳定") ||
+    text.includes("放松") ||
+    text.includes("还不错") ||
+    text.includes("挺好") ||
+    text.includes("ok") ||
+    text.includes("normal");
+  const lowRiskPhys = (input.fatigueLevel ?? 3) <= 2 && (input.socialWillingness ?? 3) >= 3;
+  const likelyHealthy = input.level === "healthy" || (input.level === "mild" && !hasOverloadWord && !hasBlockWord);
 
   if (hasMixSignal || (hasOverloadWord && hasBlockWord)) return "mixed_fluctuation";
   if (hasOverloadWord) return "sensory_overload";
   if (hasBlockWord) return "emotional_block";
-  return input.level === "moderate" || input.level === "severe" ? "mixed_fluctuation" : "sensory_overload";
+  if (hasStableSignal || (likelyHealthy && lowRiskPhys)) return "stable_normal";
+  return input.level === "moderate" || input.level === "severe" ? "mixed_fluctuation" : "stable_normal";
 };
 
 const buildEmotionTags = (input: AnalyzeInput): string[] => {
   const tags = new Set<string>();
   const text = input.text.toLowerCase();
 
-  if (text.includes("焦虑") || text.includes("慌") || text.includes("紧张")) tags.add("anxiety");
-  if (text.includes("累") || text.includes("疲")) tags.add("fatigue");
-  if (text.includes("空") || text.includes("麻木")) tags.add("numbness");
-  if (text.includes("烦") || text.includes("生气")) tags.add("irritability");
+  if (text.includes("焦虑") || text.includes("慌") || text.includes("紧张")) tags.add("焦虑");
+  if (text.includes("累") || text.includes("疲")) tags.add("疲惫");
+  if (text.includes("空") || text.includes("麻木")) tags.add("麻木");
+  if (text.includes("烦") || text.includes("生气")) tags.add("烦躁");
 
-  if (tags.size === 0) tags.add("low_stability");
+  if (tags.size === 0) tags.add("波动");
   return Array.from(tags);
 };
 
@@ -67,13 +78,18 @@ export class MockEmotionAnalyzer implements EmotionAnalyzer {
         ? "更接近感官过载"
         : stateType === "emotional_block"
           ? "更接近情感屏蔽"
-          : "更接近波动混合";
+          : stateType === "mixed_fluctuation"
+            ? "更接近波动混合"
+            : "更接近稳定常态";
 
     return {
       emotionTags,
       contradictions,
       stateType,
-      summary: `你当前${stateText}状态，情绪与能量信号存在短时失衡，建议先降负荷再做小步调节。`,
+      summary:
+        stateType === "stable_normal"
+          ? `你当前${stateText}状态，整体节律较平稳，建议保持已有作息并延续小步行动。`
+          : `你当前${stateText}状态，情绪与能量信号存在短时失衡，建议先降负荷再做小步调节。`,
       stateConfidence: confidenceByLevel(input.level)
     };
   }
