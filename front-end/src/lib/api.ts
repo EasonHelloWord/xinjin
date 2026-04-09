@@ -121,7 +121,11 @@ export interface ChatMessage {
 }
 
 export type UserLevel = "healthy" | "mild" | "moderate" | "severe";
-export type StateType = "sensory_overload" | "emotional_block" | "mixed_fluctuation" | "stable_normal";
+export type StateType =
+  | "sensory_overload"
+  | "emotional_block"
+  | "mixed_fluctuation"
+  | "stable_normal";
 
 export interface AssessmentSectionScores {
   emotion: number;

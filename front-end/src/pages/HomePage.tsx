@@ -63,9 +63,9 @@ const levelLabel = (level: UserLevel): string => {
 };
 
 const stateTypeLabel = (stateType: StateType): string => {
-  if (stateType === "stable_normal") return "稳定常态";
   if (stateType === "sensory_overload") return "感官过载型";
   if (stateType === "emotional_block") return "情感屏蔽型";
+  if (stateType === "stable_normal") return "正常稳定型";
   return "波动混合型";
 };
 

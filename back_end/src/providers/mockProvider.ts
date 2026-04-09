@@ -14,6 +14,22 @@ const pickStateType = (input: AnalyzeInput): AnalyzeOutput["stateType"] => {
     text.includes("不想") ||
     text.includes("冷") ||
     text.includes("numb");
+  const hasRegulatingSignal =
+    text.includes("调整") ||
+    text.includes("缓一缓") ||
+    text.includes("慢慢来") ||
+    text.includes("理一理") ||
+    text.includes("稳一稳") ||
+    text.includes("休息");
+  const hasRecoverySignal =
+    text.includes("平静") ||
+    text.includes("稳定") ||
+    text.includes("还好") ||
+    text.includes("希望") ||
+    text.includes("期待") ||
+    text.includes("恢复") ||
+    text.includes("能处理") ||
+    text.includes("可以");
   const hasMixSignal =
     (typeof input.sleepHours === "number" && input.sleepHours >= 7.5 && (input.fatigueLevel ?? 3) >= 4) ||
     ((input.socialWillingness ?? 3) <= 2 && (input.fatigueLevel ?? 3) >= 4);
@@ -29,6 +45,7 @@ const pickStateType = (input: AnalyzeInput): AnalyzeOutput["stateType"] => {
   const likelyHealthy = input.level === "healthy" || (input.level === "mild" && !hasOverloadWord && !hasBlockWord);
 
   if (hasMixSignal || (hasOverloadWord && hasBlockWord)) return "mixed_fluctuation";
+  if ((hasRecoverySignal || hasRegulatingSignal) && !hasOverloadWord && !hasBlockWord && input.level !== "severe") return "stable_normal";
   if (hasOverloadWord) return "sensory_overload";
   if (hasBlockWord) return "emotional_block";
   if (hasStableSignal || (likelyHealthy && lowRiskPhys)) return "stable_normal";
@@ -39,13 +56,21 @@ const buildEmotionTags = (input: AnalyzeInput): string[] => {
   const tags = new Set<string>();
   const text = input.text.toLowerCase();
 
-  if (text.includes("焦虑") || text.includes("慌") || text.includes("紧张")) tags.add("焦虑");
-  if (text.includes("累") || text.includes("疲")) tags.add("疲惫");
-  if (text.includes("空") || text.includes("麻木")) tags.add("麻木");
-  if (text.includes("烦") || text.includes("生气")) tags.add("烦躁");
+  if (text.includes("焦虑") || text.includes("慌") || text.includes("紧张")) tags.add("有些焦虑");
+  if (text.includes("累") || text.includes("疲")) tags.add("有点疲惫");
+  if (text.includes("空") || text.includes("麻木")) tags.add("情绪发空");
+  if (text.includes("烦") || text.includes("生气")) tags.add("有些烦躁");
+  if (text.includes("平静") || text.includes("还好") || text.includes("稳定")) tags.add("相对平稳");
+  if (text.includes("想调整") || text.includes("缓一缓") || text.includes("慢慢来")) tags.add("自我调节中");
+  if (text.includes("想聊") || text.includes("求助") || text.includes("陪") || text.includes("理解")) tags.add("愿意求助");
+  if (text.includes("希望") || text.includes("期待") || text.includes("想试试")) tags.add("保有期待");
+  if (text.includes("观察") || text.includes("觉察") || text.includes("意识到")) tags.add("有所觉察");
 
-  if (tags.size === 0) tags.add("波动");
-  return Array.from(tags);
+  if (tags.size === 0) {
+    tags.add(input.level === "healthy" ? "相对平稳" : "自我调节中");
+  }
+
+  return Array.from(tags).slice(0, 5);
 };
 
 const buildContradictions = (input: AnalyzeInput): string[] => {
@@ -78,9 +103,9 @@ export class MockEmotionAnalyzer implements EmotionAnalyzer {
         ? "更接近感官过载"
         : stateType === "emotional_block"
           ? "更接近情感屏蔽"
-          : stateType === "mixed_fluctuation"
-            ? "更接近波动混合"
-            : "更接近稳定常态";
+          : stateType === "stable_normal"
+            ? "更接近正常稳定"
+            : "更接近波动混合";
 
     return {
       emotionTags,
@@ -121,6 +146,17 @@ const buildSixDimAdvice = (input: PlanInput): SixDimAdvice => {
       behavior: "🚶 今天只做一件微小的事：下楼慢走5分钟，感受脚底与地面的接触。走完后给自己打一个“完成勾”，哪怕只完成50%也算有效。",
       relation: "📩 给一位信任的人发一条简短消息，重点是“发出去了”，不强求回复。比如“我今天有点空，需要一点时间缓一缓。”",
       environment: "🍵 书桌旁放一杯温水，提醒自己可以像这杯水一样安静地待着。把视觉里最杂乱的一小块区域整理好，降低大脑背景噪声。"
+    };
+  }
+
+  if (input.stateType === "stable_normal" || input.level === "healthy") {
+    return {
+      body: "🌿 做2分钟舒展或慢走，让身体保持当前节律，不需要额外用力，只是轻轻续上这份稳定。",
+      emotion: "🙂 记下此刻一个还算顺的感受，比如“比较稳”“没那么乱了”，帮助自己识别已经存在的平衡感。",
+      cognition: "📝 写下一句今天依然成立的支持性想法，例如“我可以一步一步来”，把它当作接下来半天的主线提醒。",
+      behavior: "✅ 继续完成一件正在推进的小事，不追求超额表现，保持正常节奏就够了。",
+      relation: "🤝 和一个让你感觉轻松的人保持简短连接，哪怕只是发一句近况，也是在巩固支持感。",
+      environment: "☀️ 让桌面和光线维持清爽状态，别额外堆任务，让环境继续服务于你的稳定感。"
     };
   }
 
