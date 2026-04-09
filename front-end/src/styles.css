@@ -1297,9 +1297,13 @@ select {
   text-decoration: underline;
 }
 
+.mira-streaming-text {
+  white-space: pre-wrap;
+}
+
 .mira-msg-token-fade {
   display: inline;
-  animation: mira-token-fade-in 0.26s ease;
+  animation: mira-token-fade-in 0.26s ease both;
 }
 
 @keyframes mira-token-fade-in {

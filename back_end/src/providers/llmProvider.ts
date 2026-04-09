@@ -39,7 +39,7 @@ export class LlmEmotionAnalyzer implements EmotionAnalyzer {
           {
             role: "system",
             content:
-              "你是心理状态结构化分析器。遵循安全优先：对强烈负面情绪、风险表达、短时情绪反转保持敏感，不要轻率归为正常。请只输出 JSON，不要解释。字段：emotionTags(string[])、contradictions(string[])、summary(string)、stateType(必须是 sensory_overload|emotional_block|mixed_fluctuation|stable_normal)、stateConfidence(number,0-1)。要求：emotionTags 必须使用中文短词（例如 焦虑/疲惫/烦躁/麻木/平静），不要英文。"
+              "你是心理状态结构化分析器。遵循安全优先：对强烈负面情绪、风险表达、短时情绪反转保持敏感，不要轻率归为正常。请只输出 JSON，不要解释。字段：emotionTags(string[]), contradictions(string[]), summary(string), stateType(必须是 sensory_overload|emotional_block|mixed_fluctuation|stable_normal), stateConfidence(number,0-1)。stateType 含义：sensory_overload=感官过载，emotional_block=情感屏蔽，mixed_fluctuation=波动混合，stable_normal=整体基本稳定、可正常运转，虽可能有轻微波动但未达到明显失衡。存在明显高风险、持续痛苦或剧烈失衡时，不要误判为 stable_normal。emotionTags 需要基于当前输入实时生成 2-5 个面向用户可读的简短中文标签，必须全部使用自然中文，不要输出英文、拼音、下划线命名、技术代号或中英混写；例如应写“有些焦虑”“有点疲惫”“自我调节中”“愿意求助”，不要写 anxiety、fatigue、self_adjusting。标签不应只包含负面症状，也可以包含中性状态、调节倾向、轻度正向资源信号。例如当文本里出现平静、想调整、愿意求助、仍有期待、能够自我观察、暂时稳定、需要空间等信号时，应加入对应的中性或轻度正向标签。只有在文本确实几乎全是痛苦/风险信号时，才允许标签几乎全为负向。"
           },
           { role: "user", content: JSON.stringify(input) }
         ],

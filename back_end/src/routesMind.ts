@@ -5,7 +5,7 @@ import { authMiddleware } from "./authMiddleware";
 import { getDb } from "./db";
 import { badRequest, forbidden } from "./errors";
 import { getProviders } from "./providers/factory";
-import { AdviceConfidence, AssessmentSectionScores, SixDimAdvice, UserLevel } from "./providers/types";
+import { AdviceConfidence, AssessmentSectionScores, SixDimAdvice, StateType, UserLevel } from "./providers/types";
 
 const assessmentSubmitSchema = z.object({
   answers: z.array(z.number().int().min(1).max(5)).length(20)
@@ -167,29 +167,35 @@ const evaluateSafetySignals = (textRaw: string): {
 };
 
 const EMOTION_TAG_ALIAS: Record<string, string> = {
-  anxiety: "焦虑",
-  anxious: "焦虑",
-  stress: "压力",
-  stressed: "压力",
-  fatigue: "疲惫",
-  tired: "疲惫",
-  numbness: "麻木",
-  numb: "麻木",
-  irritability: "烦躁",
-  anger: "愤怒",
-  angry: "愤怒",
-  sadness: "悲伤",
-  sad: "悲伤",
-  fear: "害怕",
-  panic: "恐慌",
-  low_stability: "波动"
+  anxiety: "有些焦虑",
+  anxious: "有些焦虑",
+  stress: "感到压力",
+  stressed: "感到压力",
+  fatigue: "有点疲惫",
+  tired: "有点疲惫",
+  numbness: "情绪发空",
+  numb: "情绪发空",
+  irritability: "有些烦躁",
+  anger: "带着愤怒",
+  angry: "带着愤怒",
+  sadness: "有些悲伤",
+  sad: "有些悲伤",
+  fear: "带着害怕",
+  panic: "有些恐慌",
+  low_stability: "状态波动",
+  stable_moment: "相对平稳",
+  self_adjusting: "自我调节中",
+  seeking_support: "愿意求助",
+  hopeful: "保有期待",
+  self_awareness: "有所觉察"
 };
 
-const toChineseEmotionTag = (raw: string): string => {
-  const normalized = raw.trim().toLowerCase();
+const normalizeEmotionTag = (raw: string): string => {
+  const trimmed = raw.trim();
+  const normalized = trimmed.toLowerCase();
   if (!normalized) return "";
   if (EMOTION_TAG_ALIAS[normalized]) return EMOTION_TAG_ALIAS[normalized];
-  if (/[\u4e00-\u9fa5]/.test(raw)) return raw.trim().slice(0, 8);
+  if (/[\u4e00-\u9fa5]/.test(trimmed)) return trimmed.slice(0, 8);
   return "";
 };
 
@@ -197,13 +203,13 @@ const normalizeEmotionTags = (tags: string[]): string[] => {
   const next: string[] = [];
   const seen = new Set<string>();
   for (const tag of tags) {
-    const cn = toChineseEmotionTag(tag);
+    const cn = normalizeEmotionTag(tag);
     if (!cn || seen.has(cn)) continue;
     seen.add(cn);
     next.push(cn);
     if (next.length >= 6) break;
   }
-  if (next.length === 0) next.push("波动");
+  if (next.length === 0) next.push("状态波动");
   return next;
 };
 
@@ -324,6 +330,16 @@ const parseConfidence = (raw: string): AdviceConfidence | null => {
   }
 };
 
+const normalizeStateType = (raw: string): StateType => {
+  if (raw === "sensory_overload" || raw === "emotional_block" || raw === "mixed_fluctuation" || raw === "stable_normal") {
+    return raw;
+  }
+  if (raw === "self_regulating" || raw === "resource_recovering") {
+    return "stable_normal";
+  }
+  return "mixed_fluctuation";
+};
+
 const toAssessmentResponse = (row: AssessmentRow) => ({
   id: row.id,
   score: row.score,
@@ -350,10 +366,10 @@ const toAnalysisResponse = (row: AnalysisRow) => ({
   sleepHours: row.sleep_hours,
   fatigueLevel: row.fatigue_level,
   socialWillingness: row.social_willingness,
-  emotionTags: parseJsonStringArray(row.emotion_tags_json),
+  emotionTags: normalizeEmotionTags(parseJsonStringArray(row.emotion_tags_json)),
   contradictions: parseJsonStringArray(row.contradictions_json),
   summary: row.summary,
-  stateType: row.state_type,
+  stateType: normalizeStateType(row.state_type),
   microTasks: parseJsonStringArray(row.micro_tasks_json),
   confidence: parseConfidence(row.confidence_json),
   riskNotice: row.risk_notice,

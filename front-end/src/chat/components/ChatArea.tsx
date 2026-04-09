@@ -28,7 +28,7 @@ function MarkdownMessage({ text }: { text: string }): JSX.Element {
   );
 }
 
-function StreamingAssistantText({ text }: { text: string }): JSX.Element {
+function StreamingAssistantText({ text, isStreaming }: { text: string; isStreaming: boolean }): JSX.Element {
   const [settledText, setSettledText] = useState(text);
   const [pendingSegments, setPendingSegments] = useState<AnimatedSegment[]>([]);
   const latestFullTextRef = useRef(text);
@@ -42,6 +42,15 @@ function StreamingAssistantText({ text }: { text: string }): JSX.Element {
   }, []);
 
   useEffect(() => {
+    if (!isStreaming) {
+      timeoutIdsRef.current.forEach((id) => window.clearTimeout(id));
+      timeoutIdsRef.current = [];
+      latestFullTextRef.current = text;
+      setPendingSegments([]);
+      setSettledText(text);
+      return;
+    }
+
     const previousFullText = latestFullTextRef.current;
     if (text === previousFullText) {
       return;
@@ -73,12 +82,23 @@ function StreamingAssistantText({ text }: { text: string }): JSX.Element {
     }, 260);
 
     timeoutIdsRef.current.push(timeoutId);
-  }, [text]);
+  }, [text, isStreaming]);
 
-  const pendingText = pendingSegments.map((segment) => segment.text).join("");
+  if (!isStreaming) {
+    return <MarkdownMessage text={text} />;
+  }
 
   return (
-    <MarkdownMessage text={settledText + pendingText} />
+    <div className="mira-markdown mira-streaming-markdown">
+      <div className="mira-streaming-text">
+        <span>{settledText}</span>
+        {pendingSegments.map((segment) => (
+          <span key={segment.id} className="mira-msg-token-fade">
+            {segment.text}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -277,11 +297,14 @@ export function ChatArea({
       <div className="mira-chat-shell">
         <div className="mira-message-list-wrap">
           <section ref={messageListRef} className="mira-message-list" aria-live="polite">
-            {messages.map((msg) => (
+            {messages.map((msg, index) => (
               <article key={msg.id} className={`mira-msg ${msg.role === "user" ? "user" : "assistant"}`}>
                 <div className="mira-msg-bubble">
                   {msg.role === "assistant" ? (
-                    <StreamingAssistantText text={msg.content || "..."} />
+                    <StreamingAssistantText
+                      text={msg.content || "..."}
+                      isStreaming={loading && index === messages.length - 1}
+                    />
                   ) : (
                     <MarkdownMessage text={msg.content || "..."} />
                   )}
