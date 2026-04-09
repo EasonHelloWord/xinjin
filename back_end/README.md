@@ -27,6 +27,9 @@ npm run start
 - `LLM_API_KEY` (optional): when present, backend uses the configured LLM instead of mock replies.
 - `LLM_BASE_URL` (optional): defaults to `https://api.openai.com/v1`.
 - `LLM_MODEL` (optional): defaults to `gpt-4o-mini`.
+- `STT_API_KEY` (optional): speech-to-text API key; falls back to `LLM_API_KEY` when omitted.
+- `STT_BASE_URL` (optional): speech-to-text base URL; falls back to `LLM_BASE_URL`.
+- `STT_MODEL` (optional): speech-to-text model; defaults to `gpt-4o-mini-transcribe`.
 - `MCP_SERVER_CMD` (optional): command used to start the local MCP server over stdio.
 - `MCP_SERVER_CWD` (optional): working directory for `MCP_SERVER_CMD`. Use this if the MCP command contains relative paths.
 - `XINJIN_CONFIG_FILE` (optional): extra config file path. Supports `.env`-style files and `.json`.
@@ -44,6 +47,7 @@ Example `.env`:
 LLM_API_KEY=your-llm-api-key
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o-mini
+STT_MODEL=gpt-4o-mini-transcribe
 MCP_SERVER_CMD=node dist/index.js
 MCP_SERVER_CWD=../mcp_server
 ```

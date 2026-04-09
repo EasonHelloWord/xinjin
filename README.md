@@ -75,6 +75,9 @@ npm run dev
 - `DEEPSEEK_API_KEY`：DeepSeek API Key（有值时可启用 DeepSeek）
 - `DEEPSEEK_BASE_URL`：默认 `https://api.deepseek.com`
 - `DEEPSEEK_MODEL`：默认 `deepseek-chat`
+- `STT_API_KEY`：语音转写 API Key（可选；不填时回退 `LLM_API_KEY`/`OPENAI_API_KEY`）
+- `STT_BASE_URL`：语音转写 API 基础地址（可选；默认复用 LLM/OPENAI base URL）
+- `STT_MODEL`：语音转写模型（默认 `gpt-4o-mini-transcribe`）
 
 说明：
 

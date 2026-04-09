@@ -5,6 +5,7 @@ import { authMiddleware } from "./authMiddleware";
 import { getDb } from "./db";
 import { badRequest, forbidden, notFound } from "./errors";
 import { ChatHistoryItem, generateAssistantReply, generateSessionTitle, getSessionTitleRuntimeInfo, toStreamTokens } from "./mockLlm";
+import { hasSttConfig, transcribeAudioBase64 } from "./sttService";
 import { hasTtsConfig, streamTtsAudio } from "./ttsService";
 
 const createSessionSchema = z.object({
@@ -16,6 +17,12 @@ const streamMessageSchema = z.object({
   voice: z.boolean().optional(),
   thinking: z.boolean().optional(),
   clientMessageId: z.string().trim().min(8).max(128).optional()
+});
+
+const voiceTranscribeSchema = z.object({
+  audioBase64: z.string().trim().min(8),
+  mimeType: z.string().trim().max(100).optional(),
+  language: z.string().trim().max(20).optional()
 });
 
 type SessionRow = {
@@ -417,6 +424,39 @@ const insertMessage = async (
 };
 
 export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void> => {
+  fastify.route({
+    method: "POST",
+    url: "/api/voice/transcribe",
+    preHandler: authMiddleware,
+    handler: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const parsed = voiceTranscribeSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw badRequest("INVALID_INPUT", parsed.error.issues.map((item) => item.message).join("; "));
+      }
+      if (!hasSttConfig()) {
+        throw badRequest("STT_NOT_CONFIGURED", "语音转写服务未配置");
+      }
+
+      const normalizedBase64 = parsed.data.audioBase64.replace(/^data:[^;]+;base64,/, "").trim();
+      const approxBytes = Math.floor((normalizedBase64.length * 3) / 4);
+      if (approxBytes > 5 * 1024 * 1024) {
+        throw badRequest("VOICE_TOO_LARGE", "单次语音片段过大，请缩短录音时长");
+      }
+
+      try {
+        const text = await transcribeAudioBase64({
+          audioBase64: parsed.data.audioBase64,
+          mimeType: parsed.data.mimeType,
+          language: parsed.data.language
+        });
+        return { text };
+      } catch (err) {
+        fastify.log.error({ err }, "voice transcribe failed");
+        throw badRequest("VOICE_TRANSCRIBE_FAILED", err instanceof Error ? err.message : "语音转写失败");
+      }
+    }
+  });
+
   fastify.route({
     method: "POST",
     url: "/api/chat/sessions",

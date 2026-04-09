@@ -183,6 +183,10 @@ export interface LandingVisitCount {
   count: number;
 }
 
+export interface VoiceTranscribeResponse {
+  text: string;
+}
+
 type SSEHandlers = {
   onToken?: (text: string) => void;
   onPulse?: (v: number) => void;
@@ -464,6 +468,20 @@ export const api = {
     window.clearTimeout(timeout);
     if (!doneReceived) throw new Error("Stream ended without done event");
   },
+
+  transcribeVoice: (
+    audioBase64: string,
+    mimeType?: string,
+    language?: string
+  ): Promise<VoiceTranscribeResponse> =>
+    request<VoiceTranscribeResponse>("/api/voice/transcribe", {
+      method: "POST",
+      body: JSON.stringify({
+        audioBase64,
+        mimeType,
+        language
+      })
+    }),
 
   submitAssessment: (answers: number[]): Promise<AssessmentResult> =>
     request<AssessmentResult>("/api/assessment/submit", {
