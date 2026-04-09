@@ -179,10 +179,17 @@ export interface ProfileTimeline {
   analyses: Array<AnalysisResult & { inputText: string }>;
 }
 
+export interface LandingVisitCount {
+  count: number;
+}
+
 type SSEHandlers = {
   onToken?: (text: string) => void;
   onPulse?: (v: number) => void;
   onDone?: (payload: { messageId: string; sessionTitle?: string }) => void;
+  onTtsChunk?: (payload: { audio: string; seq: number; sampleRate?: number; format?: string }) => void;
+  onTtsStart?: (payload: { sampleRate?: number; format?: string }) => void;
+  onTtsEnd?: (payload: { chunks?: number; style?: string; sampleRate?: number }) => void;
   onError?: (message: string) => void;
 };
 
@@ -226,6 +233,38 @@ const dispatchSseEvent = (evt: SseEvent, handlers: SSEHandlers): void => {
         sessionTitle: typeof sessionTitle === "string" ? sessionTitle : undefined
       });
     }
+    return;
+  }
+
+  if (evt.event === "tts_start") {
+    const parsedObj = parsed as { sampleRate?: unknown; format?: unknown };
+    handlers.onTtsStart?.({
+      sampleRate: typeof parsedObj.sampleRate === "number" ? parsedObj.sampleRate : undefined,
+      format: typeof parsedObj.format === "string" ? parsedObj.format : undefined
+    });
+    return;
+  }
+
+  if (evt.event === "tts_chunk") {
+    const parsedObj = parsed as { audio?: unknown; seq?: unknown; sampleRate?: unknown; format?: unknown };
+    if (typeof parsedObj.audio === "string") {
+      handlers.onTtsChunk?.({
+        audio: parsedObj.audio,
+        seq: typeof parsedObj.seq === "number" ? parsedObj.seq : 0,
+        sampleRate: typeof parsedObj.sampleRate === "number" ? parsedObj.sampleRate : undefined,
+        format: typeof parsedObj.format === "string" ? parsedObj.format : undefined
+      });
+    }
+    return;
+  }
+
+  if (evt.event === "tts_end") {
+    const parsedObj = parsed as { chunks?: unknown; style?: unknown; sampleRate?: unknown };
+    handlers.onTtsEnd?.({
+      chunks: typeof parsedObj.chunks === "number" ? parsedObj.chunks : undefined,
+      style: typeof parsedObj.style === "string" ? parsedObj.style : undefined,
+      sampleRate: typeof parsedObj.sampleRate === "number" ? parsedObj.sampleRate : undefined
+    });
     return;
   }
 
@@ -448,5 +487,16 @@ export const api = {
 
   getProfileSummary: (): Promise<ProfileSummary> => request<ProfileSummary>("/api/profile/summary"),
 
-  getProfileTimeline: (): Promise<ProfileTimeline> => request<ProfileTimeline>("/api/profile/timeline")
+  getProfileTimeline: (): Promise<ProfileTimeline> => request<ProfileTimeline>("/api/profile/timeline"),
+
+  getLandingVisits: (): Promise<LandingVisitCount> =>
+    request<LandingVisitCount>("/api/landing/visits", {
+      skipAuth: true
+    }),
+
+  incrementLandingVisits: (): Promise<LandingVisitCount> =>
+    request<LandingVisitCount>("/api/landing/visits/increment", {
+      method: "POST",
+      skipAuth: true
+    })
 };

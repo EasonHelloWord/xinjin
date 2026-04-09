@@ -5,6 +5,7 @@ import { authMiddleware } from "./authMiddleware";
 import { getDb } from "./db";
 import { badRequest, forbidden, notFound } from "./errors";
 import { ChatHistoryItem, generateAssistantReply, generateSessionTitle, getSessionTitleRuntimeInfo, toStreamTokens } from "./mockLlm";
+import { hasTtsConfig, streamTtsAudio } from "./ttsService";
 
 const createSessionSchema = z.object({
   title: z.string().trim().min(1).max(120).optional()
@@ -294,6 +295,51 @@ const randomPulse = (): number => Number((0.15 + Math.random() * 0.3).toFixed(3)
 
 const userClientId = (clientMessageId: string): string => `${clientMessageId}:u`;
 const assistantClientId = (clientMessageId: string): string => `${clientMessageId}:a`;
+
+const streamTtsToSse = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+  assistantText: string,
+  userText?: string
+): Promise<void> => {
+  if (!hasTtsConfig()) return;
+  if (!assistantText.trim()) return;
+  if (reply.raw.writableEnded) return;
+
+  writeSseEvent(reply, "tts_start", {
+    format: "pcm16",
+    sampleRate: 24000
+  });
+
+  try {
+    const tts = await streamTtsAudio({
+      assistantText,
+      userText,
+      signal: request.raw.aborted ? AbortSignal.abort() : undefined,
+      onChunk: async ({ data, seq }) => {
+        if (reply.raw.writableEnded) return;
+        writeSseEvent(reply, "tts_chunk", {
+          audio: data,
+          seq,
+          format: "pcm16",
+          sampleRate: 24000
+        });
+      }
+    });
+
+    if (!reply.raw.writableEnded) {
+      writeSseEvent(reply, "tts_end", {
+        chunks: tts.emittedChunks,
+        style: tts.style,
+        sampleRate: tts.sampleRate
+      });
+    }
+  } catch {
+    if (!reply.raw.writableEnded) {
+      writeSseEvent(reply, "tts_error", { message: "TTS stream failed" });
+    }
+  }
+};
 
 const waitForAssistantByClientId = async (
   sessionId: string,
@@ -602,6 +648,9 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
           writeSseEvent(reply, "pulse", { v: randomPulse() });
           await sleep(randomIntInRange(12, 22));
         }
+        if (parsed.data.voice) {
+          await streamTtsToSse(request, reply, existingAssistant.content, parsed.data.content);
+        }
         writeSseEvent(reply, "done", { messageId: existingAssistant.id, sessionTitle: session.title });
         reply.raw.end();
         return;
@@ -637,6 +686,9 @@ export const registerChatRoutes = async (fastify: FastifyInstance): Promise<void
 
         if (closed || reply.raw.writableEnded) {
           return;
+        }
+        if (parsed.data.voice) {
+          await streamTtsToSse(request, reply, finalAssistantText, parsed.data.content);
         }
         writeSseEvent(reply, "done", { messageId: assistantMessage.id, sessionTitle: session.title });
         reply.raw.end();

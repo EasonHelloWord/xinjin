@@ -6,6 +6,7 @@ import { getDb } from "./db";
 import { AppError } from "./errors";
 import { registerAuthRoutes } from "./routesAuth";
 import { registerChatRoutes } from "./routesChat";
+import { registerLandingRoutes } from "./routesLanding";
 import { registerMindRoutes } from "./routesMind";
 import { registerMainWs } from "./wsMain";
 
@@ -93,6 +94,7 @@ const createServer = async () => {
 
   await registerAuthRoutes(fastify);
   await registerChatRoutes(fastify);
+  await registerLandingRoutes(fastify);
   await registerMindRoutes(fastify);
   await fastify.register(websocket);
   await registerMainWs(fastify);

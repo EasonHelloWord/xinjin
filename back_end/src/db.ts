@@ -83,6 +83,12 @@ const initialize = async (): Promise<Database> => {
       FOREIGN KEY (assessment_id) REFERENCES assessment_records(id) ON DELETE SET NULL
     );
 
+    CREATE TABLE IF NOT EXISTS site_counters (
+      key TEXT PRIMARY KEY,
+      value INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id_created_at
       ON sessions(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_session_id_created_at
@@ -153,6 +159,17 @@ const initialize = async (): Promise<Database> => {
       ON messages(session_id, client_id)
       WHERE client_id IS NOT NULL
   `);
+
+  await db.run(
+    `
+      INSERT INTO site_counters (key, value, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO NOTHING
+    `,
+    "landing_visits",
+    1120,
+    Date.now()
+  );
 
   return db;
 };

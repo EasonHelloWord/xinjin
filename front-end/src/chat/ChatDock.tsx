@@ -115,6 +115,10 @@ export function ChatDock({
   const inputElementRef = useRef<HTMLInputElement>(null);
   const inputValueRef = useRef("");
   const voiceBaseInputRef = useRef<string | null>(null);
+  const voiceEnabledRef = useRef(false);
+  const ttsAudioContextRef = useRef<AudioContext | null>(null);
+  const ttsScheduledUntilRef = useRef(0);
+  const ttsSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const sendingRef = useRef(false);
   const refocusInputAfterSendRef = useRef(false);
   const recentSubmitRef = useRef<{ text: string; at: number } | null>(null);
@@ -127,10 +131,95 @@ export function ChatDock({
     inputValueRef.current = input;
   }, [input]);
 
+  useEffect(() => {
+    voiceEnabledRef.current = voiceEnabled;
+  }, [voiceEnabled]);
+
+  const stopTtsPlayback = (): void => {
+    const sources = ttsSourcesRef.current;
+    sources.forEach((src) => {
+      try {
+        src.stop();
+      } catch {
+        // no-op
+      }
+      try {
+        src.disconnect();
+      } catch {
+        // no-op
+      }
+    });
+    sources.clear();
+    ttsScheduledUntilRef.current = 0;
+
+    const ctx = ttsAudioContextRef.current;
+    if (ctx) {
+      void ctx.close().catch(() => undefined);
+      ttsAudioContextRef.current = null;
+    }
+  };
+
   const stopSpeech = (): void => {
+    stopTtsPlayback();
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+  };
+
+  const decodePcm16Base64 = (base64: string): Float32Array => {
+    const binary = window.atob(base64);
+    const byteLength = binary.length;
+    const bytes = new Uint8Array(byteLength);
+    for (let i = 0; i < byteLength; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const sampleCount = Math.floor(view.byteLength / 2);
+    const pcmFloat = new Float32Array(sampleCount);
+    for (let i = 0; i < sampleCount; i += 1) {
+      pcmFloat[i] = view.getInt16(i * 2, true) / 32768;
+    }
+    return pcmFloat;
+  };
+
+  const ensureTtsContext = async (): Promise<AudioContext | null> => {
+    const ExistingContext = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!ExistingContext) return null;
+    if (!ttsAudioContextRef.current || ttsAudioContextRef.current.state === "closed") {
+      ttsAudioContextRef.current = new ExistingContext();
+      ttsScheduledUntilRef.current = ttsAudioContextRef.current.currentTime;
+    }
+    if (ttsAudioContextRef.current.state === "suspended") {
+      await ttsAudioContextRef.current.resume();
+    }
+    return ttsAudioContextRef.current;
+  };
+
+  const playPcm16Chunk = async (audioBase64: string, sampleRate = 24000): Promise<void> => {
+    if (!voiceEnabledRef.current) return;
+    const ctx = await ensureTtsContext();
+    if (!ctx) return;
+
+    const pcmFloat = decodePcm16Base64(audioBase64);
+    if (!pcmFloat.length) return;
+    const pcmForPlayback = new Float32Array(pcmFloat.length);
+    pcmForPlayback.set(pcmFloat);
+
+    const buffer = ctx.createBuffer(1, pcmForPlayback.length, sampleRate);
+    buffer.copyToChannel(pcmForPlayback, 0);
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.onended = () => {
+      ttsSourcesRef.current.delete(source);
+    };
+
+    const now = ctx.currentTime + 0.03;
+    const startAt = Math.max(now, ttsScheduledUntilRef.current || now);
+    source.start(startAt);
+    ttsScheduledUntilRef.current = startAt + buffer.duration;
+    ttsSourcesRef.current.add(source);
   };
 
   const hydrateSessionPreviews = async (sessionList: ChatSession[]): Promise<void> => {
@@ -317,20 +406,6 @@ export function ChatDock({
     }
   };
 
-  const speakWithPulse = (text: string): void => {
-    if (!voiceEnabled) return;
-    stopSpeech();
-    if (!("speechSynthesis" in window)) {
-      setError("当前浏览器不支持语音播报");
-      return;
-    }
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.onboundary = () => emitPulse(0.25);
-    window.speechSynthesis.speak(utterance);
-  };
-
   const sendMessage = async (rawText: string): Promise<void> => {
     if (!chatEnabled || loading || sendingRef.current) return;
     const text = rawText.trim();
@@ -376,6 +451,13 @@ export function ChatDock({
             });
           },
           onPulse: (v) => emitPulse(v),
+          onTtsStart: () => {
+            ttsScheduledUntilRef.current = 0;
+          },
+          onTtsChunk: ({ audio, sampleRate }) => {
+            void playPcm16Chunk(audio, sampleRate || 24000);
+            emitPulse(0.24);
+          },
           onDone: ({ messageId, sessionTitle }) => {
             doneMessageId = messageId;
             if (assistantTextRef.current.trim()) {
@@ -407,10 +489,6 @@ export function ChatDock({
 
       if (assistantTextRef.current.trim()) {
         updateSessionPreviewText(sid, assistantTextRef.current);
-      }
-
-      if (assistantTextRef.current && voiceEnabled) {
-        speakWithPulse(assistantTextRef.current);
       }
 
       const latest = await api.getMessages(sid);
@@ -488,11 +566,6 @@ export function ChatDock({
     setVoiceEnabled(enabled);
     if (!enabled) {
       stopSpeech();
-      return;
-    }
-    if (!("speechSynthesis" in window)) {
-      setVoiceEnabled(false);
-      setError("当前浏览器不支持语音播报");
     }
   };
 

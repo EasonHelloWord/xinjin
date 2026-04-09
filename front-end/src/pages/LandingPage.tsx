@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../lib/api";
 import "../landing.css";
 
 interface LandingPageProps {
@@ -72,7 +73,7 @@ const DEFAULT_CONTENT: LandingContent = {
   trustStats: [
     { value: "24/7", label: "温柔陪伴" },
     { value: "1v1", label: "真实连接" },
-    { value: "长期", label: "持续成长" }
+    { value: "1120", label: "累计服务人次" }
   ],
   kvTags: ["情绪识别", "呼吸引导", "睡前放松", "自我接纳", "成长记录"],
   valueTitle: "核心价值",
@@ -165,6 +166,7 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
   const [typedLine, setTypedLine] = useState("");
   const [lineIndex, setLineIndex] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [visitCount, setVisitCount] = useState<number>(1120);
 
   useEffect(() => {
     let active = true;
@@ -179,6 +181,28 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
       }
     };
     void load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadVisitCount = async (): Promise<void> => {
+      try {
+        const next = await api.incrementLandingVisits();
+        if (active) setVisitCount(next.count);
+      } catch {
+        try {
+          const fallback = await api.getLandingVisits();
+          if (active) setVisitCount(fallback.count);
+        } catch {
+          if (active) setVisitCount(1120);
+        }
+      }
+    };
+
+    void loadVisitCount();
     return () => {
       active = false;
     };
@@ -314,6 +338,10 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
     );
   };
 
+  const trustStats = content.trustStats.map((item, idx) =>
+    idx === 2 ? { value: String(visitCount), label: "累计服务人次" } : item
+  );
+
   return (
     <div className="mira-home">
       <header className="mira-nav glass-shell">
@@ -377,7 +405,7 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
               </button>
             </div>
             <div className="trust-row">
-              {content.trustStats.map((item) => (
+              {trustStats.map((item) => (
                 <article className="trust-item" key={`${item.value}-${item.label}`}>
                   <div className="trust-value">{item.value}</div>
                   <div className="trust-label">{item.label}</div>

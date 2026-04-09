@@ -9,7 +9,7 @@
   "trustStats": [
     { "value": "7×24h", "label": "随时陪伴" },
     { "value": "1v1", "label": "个性化服务" },
-    { "value": "∞", "label": "持续成长" }
+    { "value": "1120", "label": "累计服务人次" }
   ],
   "kvTags": ["情绪识别", "呼吸引导", "睡前放松", "自我接纳", "成长记录"],
   "valueTitle": "核心价值",
