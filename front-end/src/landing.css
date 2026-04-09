@@ -273,7 +273,7 @@
   color: #395056;
 }
 
-.kv-card p {
+.kv-card > p {
   margin: 0;
   color: #61777c;
   line-height: 1.6;
@@ -334,7 +334,7 @@
   justify-content: center;
   max-width: 100%;
   color: #587177;
-  font-size: 17px;
+  font-size: 24px;
   letter-spacing: 0.02em;
   line-height: 1.5;
   font-weight: 520;

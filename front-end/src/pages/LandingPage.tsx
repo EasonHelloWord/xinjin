@@ -155,7 +155,7 @@ const DEFAULT_CONTENT: LandingContent = {
   footerTagline: "用心照见自己，在陪伴中慢慢变得更稳。"
 };
 
-const TYPEWRITER_LINES = ["文字文字文字", "先慢慢说，Mira 在听。", "我们可以从一次呼吸开始。"];
+const TYPEWRITER_LINES = ["先慢慢说，Mira 在听。", "我们可以从一次呼吸开始。"];
 
 export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JSX.Element {
   const navigate = useNavigate();
