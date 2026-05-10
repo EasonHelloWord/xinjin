@@ -28,6 +28,7 @@ body,
 #root {
   margin: 0;
   width: 100%;
+  min-width: 1180px;
   height: 100%;
 }
 

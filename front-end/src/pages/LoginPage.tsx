@@ -1,88 +1,46 @@
-import { FormEvent, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { api } from "../lib/api";
-import { setAuthToken } from "../lib/auth";
+import { useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { startOidcLogin } from "../lib/oidc";
 
-interface LoginPageProps {
-  onAuthenticated: () => void;
-}
-
-type AuthMode = "login" | "register";
-
-export function LoginPage({ onAuthenticated }: LoginPageProps): JSX.Element {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const initialMode = searchParams.get("mode") === "register" ? "register" : "login";
-  const [mode, setMode] = useState<AuthMode>(initialMode);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+export function LoginPage(): JSX.Element {
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mode = searchParams.get("mode") === "register" ? "register" : "login";
+  const from = typeof location.state === "object" && location.state && "from" in location.state
+    ? String(location.state.from || "/mind")
+    : "/mind";
 
-  useEffect(() => {
-    const nextMode = searchParams.get("mode") === "register" ? "register" : "login";
-    setMode(nextMode);
-  }, [searchParams]);
-
-  const onSubmit = async (e: FormEvent): Promise<void> => {
-    e.preventDefault();
+  const redirectToAuth = async (register = false): Promise<void> => {
     setError(null);
     setLoading(true);
-
     try {
-      const response =
-        mode === "login" ? await api.login(email.trim(), password) : await api.register(email.trim(), password);
-      setAuthToken(response.token);
-      onAuthenticated();
+      await startOidcLogin({ register, returnTo: from });
     } catch (err) {
       setError((err as Error).message);
-    } finally {
       setLoading(false);
     }
   };
 
   return (
     <div className="auth-page">
-      <form className="auth-card" onSubmit={onSubmit}>
-        <h1>{mode === "login" ? "登录" : "注册"}</h1>
-        <p>登录后即可开始流式对话与语音播报。</p>
-        <label>
-          邮箱
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="请输入邮箱"
-          />
-        </label>
-        <label>
-          密码
-          <input
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="至少 8 位密码"
-          />
-        </label>
+      <div className="auth-card">
+        <h1>{mode === "register" ? "注册统一身份账号" : "统一身份登录"}</h1>
+        <p>将跳转到 auth.easonjan.top 完成身份认证，认证后自动回到心镜。</p>
         {error && <div className="auth-error">{error}</div>}
-        <button type="submit" disabled={loading}>
-          {loading ? "提交中..." : mode === "login" ? "登录" : "注册"}
+        <button type="button" onClick={() => redirectToAuth(mode === "register")} disabled={loading}>
+          {loading ? "跳转中..." : mode === "register" ? "前往注册" : "前往登录"}
         </button>
         <button
           type="button"
           className="auth-switch"
-          onClick={() => {
-            const nextMode = mode === "login" ? "register" : "login";
-            setMode(nextMode);
-            setSearchParams({ mode: nextMode });
-          }}
+          onClick={() => redirectToAuth(mode !== "register")}
           disabled={loading}
         >
-          {mode === "login" ? "还没有账号？去注册" : "已有账号？去登录"}
+          {mode === "register" ? "已有账号？前往登录" : "还没有账号？前往注册"}
         </button>
-      </form>
+      </div>
     </div>
   );
 }

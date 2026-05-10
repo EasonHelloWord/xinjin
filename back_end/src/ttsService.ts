@@ -24,7 +24,7 @@ const TTS_BASE_URL = (): string => (process.env.MIMO_TTS_BASE_URL || "https://ap
 const TTS_MODEL = (): string => (process.env.MIMO_TTS_MODEL || "mimo-v2-tts").trim();
 const TTS_VOICE = (): string => (process.env.MIMO_TTS_VOICE || "mimo_default").trim();
 const TTS_FORMAT = (): string => (process.env.MIMO_TTS_FORMAT || "pcm16").trim().toLowerCase();
-const TTS_FILTER_MODEL = (): string => (process.env.TTS_FILTER_MODEL || "qwen3.5-plus").trim();
+const TTS_FILTER_MODEL = (): string => (process.env.TTS_FILTER_MODEL || "qwen3.6-plus").trim();
 const TTS_ENABLE_FINE_TAGS = (): boolean => (process.env.MIMO_TTS_ENABLE_FINE_TAGS || "1").trim() !== "0";
 const TTS_SAMPLE_RATE = 24000;
 

@@ -1,0 +1,34 @@
+[Unit]
+Description=Xinjin backend service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tools/xinjin/back_end
+ExecStart=/usr/bin/node dist/main.js
+Restart=always
+RestartSec=5
+
+Environment=NODE_ENV=production
+Environment=PORT=8787
+Environment=OIDC_ISSUER=https://auth.easonjan.top
+Environment=OIDC_CORS_ORIGINS=https://tools.easonjan.top
+Environment=ACCESS_TOKEN_AUDIENCE=api.easonjan.top
+Environment=OIDC_DEFAULT_CLIENT_ID=xinjin
+Environment=OIDC_DEFAULT_REDIRECT_URI=https://tools.easonjan.top/xinjin/auth/callback
+
+# Replace these before enabling the service.
+Environment=JWT_SECRET=change-me-to-a-long-random-secret
+Environment=OIDC_ADMIN_TOKEN=change-me-to-a-long-random-admin-token
+
+# Run as a dedicated user if you create one:
+# User=xinjin
+# Group=xinjin
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=xinjin-backend
+
+[Install]
+WantedBy=multi-user.target

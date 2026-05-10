@@ -5,17 +5,26 @@ const trim = (value: string | undefined): string => (value || "").trim();
 const resolveApiBases = (): string[] => {
   const set = new Set<string>();
 
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol === "https:" ? "https" : "http";
-    const host = window.location.hostname;
-    if (host) set.add(`${protocol}://${host}:8787`);
-  }
-
   const envBase = trim(import.meta.env.VITE_API_BASE);
   if (envBase) set.add(envBase);
 
-  set.add("http://127.0.0.1:8787");
-  set.add("http://localhost:8787");
+  if (typeof window !== "undefined") {
+    const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+    set.add(`${window.location.origin}${basePath}`);
+    const protocol = window.location.protocol === "https:" ? "https" : "http";
+    const host = window.location.hostname;
+    const isLocalHost = host === "localhost" || host === "127.0.0.1";
+    if (isLocalHost) {
+      set.add(`${protocol}://${host}:8787`);
+      set.add("http://127.0.0.1:8787");
+      set.add("http://localhost:8787");
+    }
+  }
+
+  if (set.size === 0) {
+    set.add("http://127.0.0.1:8787");
+    set.add("http://localhost:8787");
+  }
   return Array.from(set);
 };
 

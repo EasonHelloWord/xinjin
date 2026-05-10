@@ -4,7 +4,8 @@ import OpenAI from "openai";
 import path from "node:path";
 
 let _client: Client | null = null;
-let _connecting: Promise<Client> | null = null;
+let _connecting: Promise<Client | null> | null = null;
+let _disabled = false;
 
 const hasMcpConfig = (): boolean =>
   Boolean(process.env.MCP_SERVER_CMD && process.env.MCP_SERVER_CMD.trim().length > 0);
@@ -24,14 +25,21 @@ async function connectMcpClient(): Promise<Client> {
 }
 
 export async function getMcpClient(): Promise<Client | null> {
-  if (!hasMcpConfig()) return null;
+  if (_disabled || !hasMcpConfig()) return null;
   if (_client) return _client;
   if (_connecting) return _connecting;
-  _connecting = connectMcpClient().then((c) => {
-    _client = c;
-    _connecting = null;
-    return c;
-  });
+  _connecting = connectMcpClient()
+    .then((c) => {
+      _client = c;
+      _connecting = null;
+      return c;
+    })
+    .catch((err) => {
+      _connecting = null;
+      _disabled = true;
+      console.warn(`[xinjin-mcp] disabled after connection failure: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    });
   return _connecting;
 }
 

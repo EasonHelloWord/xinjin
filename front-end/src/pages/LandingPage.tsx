@@ -172,7 +172,7 @@ export function LandingPage({ isAuthenticated, onLogout }: LandingPageProps): JS
     let active = true;
     const load = async (): Promise<void> => {
       try {
-        const res = await fetch("/landing-content.json", { cache: "no-store" });
+        const res = await fetch(`${import.meta.env.BASE_URL}landing-content.json`, { cache: "no-store" });
         if (!res.ok) throw new Error(`landing content ${res.status}`);
         const next = (await res.json()) as Partial<LandingContent>;
         if (active) setContent({ ...DEFAULT_CONTENT, ...next });

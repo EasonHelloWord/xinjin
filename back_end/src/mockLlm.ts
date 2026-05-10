@@ -13,7 +13,7 @@ type GenerateAssistantReplyOptions = {
   thinkingEnabled?: boolean;
 };
 
-const TITLE_PIPELINE_MODEL = "qwen3.5-plus";
+const TITLE_PIPELINE_MODEL = "qwen3.6-plus";
 
 const normalizeUserText = (text: string): string => text.trim().replace(/\s+/g, " ");
 const normalizeSessionTitle = (text: string, maxLength = 18): string => {

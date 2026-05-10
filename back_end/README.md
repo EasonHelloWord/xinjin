@@ -25,8 +25,8 @@ npm run start
 
 - `JWT_SECRET` (optional): JWT signing secret. Default is `dev-secret-change-me`.
 - `LLM_API_KEY` (optional): when present, backend uses the configured LLM instead of mock replies.
-- `LLM_BASE_URL` (optional): defaults to `https://api.openai.com/v1`.
-- `LLM_MODEL` (optional): defaults to `gpt-4o-mini`.
+- `LLM_BASE_URL` (optional): defaults to `https://api.openai.com/v1`; production can use DashScope compatible mode.
+- `LLM_MODEL` (optional): defaults to `gpt-4o-mini`; production config uses `qwen3.6-plus`.
 - `STT_API_KEY` (optional): speech-to-text API key; falls back to `LLM_API_KEY` when omitted.
 - `STT_BASE_URL` (optional): speech-to-text base URL; falls back to `LLM_BASE_URL`.
 - `STT_MODEL` (optional): speech-to-text model; defaults to `gpt-4o-mini-transcribe`.
@@ -45,8 +45,9 @@ Example `.env`:
 
 ```env
 LLM_API_KEY=your-llm-api-key
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-4o-mini
+LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+LLM_MODEL=qwen3.6-plus
+TTS_FILTER_MODEL=qwen3.6-plus
 STT_MODEL=gpt-4o-mini-transcribe
 MCP_SERVER_CMD=node dist/index.js
 MCP_SERVER_CWD=../mcp_server

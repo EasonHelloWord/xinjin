@@ -8,6 +8,7 @@ import { registerAuthRoutes } from "./routesAuth";
 import { registerChatRoutes } from "./routesChat";
 import { registerLandingRoutes } from "./routesLanding";
 import { registerMindRoutes } from "./routesMind";
+import { registerOidcRoutes } from "./routesOidc";
 import { registerMainWs } from "./wsMain";
 
 const createServer = async () => {
@@ -92,6 +93,7 @@ const createServer = async () => {
     });
   });
 
+  await registerOidcRoutes(fastify);
   await registerAuthRoutes(fastify);
   await registerChatRoutes(fastify);
   await registerLandingRoutes(fastify);

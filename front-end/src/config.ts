@@ -9,6 +9,12 @@ const resolveWsBase = (): { wsUrl: string } => {
   if (typeof window !== "undefined") {
     const host = window.location.hostname || "127.0.0.1";
     const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+    const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+    if (window.location.protocol === "https:" && basePath) {
+      return {
+        wsUrl: `${scheme}://${window.location.host}${basePath}/ws`
+      };
+    }
     return {
       wsUrl: `${scheme}://${host}:8787`
     };

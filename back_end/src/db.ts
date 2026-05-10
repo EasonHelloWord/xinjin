@@ -89,6 +89,58 @@ const initialize = async (): Promise<Database> => {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS oidc_keys (
+      kid TEXT PRIMARY KEY,
+      private_key_pem TEXT NOT NULL,
+      public_jwk_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS oidc_clients (
+      client_id TEXT PRIMARY KEY,
+      client_name TEXT NOT NULL,
+      redirect_uris_json TEXT NOT NULL,
+      scopes TEXT NOT NULL DEFAULT 'openid profile email',
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS oidc_authorization_codes (
+      code_hash TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      nonce TEXT,
+      code_challenge TEXT NOT NULL,
+      code_challenge_method TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      consumed_at INTEGER,
+      FOREIGN KEY (client_id) REFERENCES oidc_clients(client_id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS oidc_refresh_tokens (
+      token_hash TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      revoked_at INTEGER,
+      FOREIGN KEY (client_id) REFERENCES oidc_clients(client_id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS oidc_web_sessions (
+      id_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      revoked_at INTEGER,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id_created_at
       ON sessions(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_session_id_created_at
@@ -97,6 +149,12 @@ const initialize = async (): Promise<Database> => {
       ON assessment_records(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_analysis_user_id_created_at
       ON state_analyses(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_oidc_codes_client_user
+      ON oidc_authorization_codes(client_id, user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_oidc_refresh_user_client
+      ON oidc_refresh_tokens(user_id, client_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_oidc_web_sessions_user
+      ON oidc_web_sessions(user_id, created_at DESC);
   `);
 
   // Backward-compatible migration for old local DBs.
@@ -170,6 +228,25 @@ const initialize = async (): Promise<Database> => {
     1120,
     Date.now()
   );
+
+  const defaultClientId = (process.env.OIDC_DEFAULT_CLIENT_ID || "xinjin").trim();
+  const defaultRedirectUri = (
+    process.env.OIDC_DEFAULT_REDIRECT_URI || "https://tools.easonjan.top/auth/callback"
+  ).trim();
+  if (defaultClientId && defaultRedirectUri) {
+    await db.run(
+      `
+        INSERT INTO oidc_clients (client_id, client_name, redirect_uris_json, scopes, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(client_id) DO NOTHING
+      `,
+      defaultClientId,
+      defaultClientId,
+      JSON.stringify([defaultRedirectUri]),
+      "openid profile email",
+      Date.now()
+    );
+  }
 
   return db;
 };
