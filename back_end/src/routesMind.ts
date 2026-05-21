@@ -19,6 +19,16 @@ const analyzeSchema = z.object({
   socialWillingness: z.number().int().min(1).max(5).optional()
 });
 
+const microTaskToggleSchema = z.object({
+  task: z.string().trim().min(1).max(240),
+  completed: z.boolean(),
+  taskDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+});
+
+const insightsQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).default(30)
+});
+
 type AssessmentRow = {
   id: string;
   user_id: string;
@@ -27,6 +37,16 @@ type AssessmentRow = {
   answers_json: string;
   section_scores_json: string;
   created_at: number;
+};
+
+type MicroTaskEventRow = {
+  id: string;
+  user_id: string;
+  task_date: string;
+  task_text: string;
+  completed: number;
+  created_at: number;
+  updated_at: number;
 };
 
 type AnalysisRow = {
@@ -376,6 +396,190 @@ const toAnalysisResponse = (row: AnalysisRow) => ({
   createdAt: row.created_at
 });
 
+const dateKey = (timestamp: number): string => {
+  const d = new Date(timestamp);
+  return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+};
+
+const startOfDateKey = (key: string): number => {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1).getTime();
+};
+
+const normalizeSectionPercent = (value: number | undefined): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round((value / 25) * 100)));
+};
+
+const stateLoad = (analysis: AnalysisRow & { assessment_score?: number | null }): number => {
+  const stateLoadMap: Record<StateType, number> = {
+    stable_normal: 18,
+    emotional_block: 58,
+    mixed_fluctuation: 68,
+    sensory_overload: 74
+  };
+  const state = normalizeStateType(analysis.state_type);
+  const tags = normalizeEmotionTags(parseJsonStringArray(analysis.emotion_tags_json));
+  const fatigueBoost = typeof analysis.fatigue_level === "number" ? analysis.fatigue_level * 5 : 0;
+  const socialBoost = typeof analysis.social_willingness === "number" ? (5 - analysis.social_willingness) * 4 : 0;
+  const scoreLoad = typeof analysis.assessment_score === "number" ? 100 - analysis.assessment_score : 45;
+  const riskBoost = analysis.risk_notice ? 12 : 0;
+  return Math.max(
+    0,
+    Math.min(100, Math.round(scoreLoad * 0.32 + stateLoadMap[state] * 0.48 + tags.length * 2 + fatigueBoost + socialBoost + riskBoost))
+  );
+};
+
+const buildInsightData = async (userId: string, days: number) => {
+  const db = await getDb();
+  const now = Date.now();
+  const todayStart = startOfDateKey(dateKey(now));
+  const startAt = todayStart - (days - 1) * 86_400_000;
+  const keys = Array.from({ length: days }, (_, i) => dateKey(startAt + i * 86_400_000));
+
+  const assessments = await db.all<AssessmentRow[]>(
+    `
+      SELECT id, user_id, score, level, answers_json, section_scores_json, created_at
+      FROM assessment_records
+      WHERE user_id = ? AND created_at >= ?
+      ORDER BY created_at ASC
+    `,
+    userId,
+    startAt
+  );
+
+  const analyses = await db.all<(AnalysisRow & { assessment_score: number | null })[]>(
+    `
+      SELECT
+        a.id, a.user_id, a.assessment_id, a.input_text, a.sleep_hours, a.fatigue_level, a.social_willingness,
+        a.emotion_tags_json, a.contradictions_json, a.summary, a.state_type,
+        a.tcm_advice_json, a.western_advice_json, a.micro_tasks_json, a.confidence_json, a.risk_notice, a.created_at,
+        r.score AS assessment_score
+      FROM state_analyses a
+      LEFT JOIN assessment_records r ON r.id = a.assessment_id
+      WHERE a.user_id = ? AND a.created_at >= ?
+      ORDER BY a.created_at ASC
+    `,
+    userId,
+    startAt
+  );
+
+  const taskEvents = await db.all<MicroTaskEventRow[]>(
+    `
+      SELECT id, user_id, task_date, task_text, completed, created_at, updated_at
+      FROM micro_task_events
+      WHERE user_id = ? AND updated_at >= ?
+      ORDER BY updated_at ASC
+    `,
+    userId,
+    startAt
+  );
+
+  const assessmentsByDay = new Map<string, AssessmentRow[]>();
+  for (const row of assessments) {
+    const key = dateKey(row.created_at);
+    assessmentsByDay.set(key, [...(assessmentsByDay.get(key) ?? []), row]);
+  }
+
+  const healthTrend = keys.map((key) => {
+    const dayRows = assessmentsByDay.get(key) ?? [];
+    if (dayRows.length === 0) return { date: key, score: null, assessmentId: null, createdAt: null };
+    const latest = dayRows[dayRows.length - 1];
+    return { date: key, score: latest.score, assessmentId: latest.id, createdAt: latest.created_at };
+  });
+
+  const stateCounts = new Map<StateType, number>();
+  for (const row of analyses) {
+    const state = normalizeStateType(row.state_type);
+    stateCounts.set(state, (stateCounts.get(state) ?? 0) + 1);
+  }
+  const stateTypes: StateType[] = ["sensory_overload", "emotional_block", "mixed_fluctuation", "stable_normal"];
+  const stateDistribution = stateTypes.map((stateType) => {
+    const count = stateCounts.get(stateType) ?? 0;
+    return { stateType, count, percentage: analyses.length ? Math.round((count / analyses.length) * 100) : 0 };
+  });
+
+  const heatBuckets = new Map<string, { count: number; loadSum: number }>();
+  for (const row of analyses) {
+    const d = new Date(row.created_at);
+    const bucketHour = Math.floor(d.getHours() / 3) * 3;
+    const key = String(d.getDay()) + "-" + String(bucketHour);
+    const prev = heatBuckets.get(key) ?? { count: 0, loadSum: 0 };
+    prev.count += 1;
+    prev.loadSum += stateLoad(row);
+    heatBuckets.set(key, prev);
+  }
+  const heatmap = Array.from({ length: 7 }, (_, dayOfWeek) =>
+    Array.from({ length: 8 }, (_, idx) => {
+      const hour = idx * 3;
+      const bucket = heatBuckets.get(String(dayOfWeek) + "-" + String(hour));
+      return {
+        dayOfWeek,
+        hour,
+        count: bucket?.count ?? 0,
+        loadAverage: bucket?.count ? Math.round(bucket.loadSum / bucket.count) : null
+      };
+    })
+  ).flat();
+
+  const sectionRows = assessments.map((row) => parseSectionScores(row.section_scores_json)).filter((x): x is AssessmentSectionScores => Boolean(x));
+  const sectionAverages = {
+    emotion: sectionRows.length ? Math.round(sectionRows.reduce((sum, row) => sum + normalizeSectionPercent(row.emotion), 0) / sectionRows.length) : null,
+    selfAndRelation: sectionRows.length ? Math.round(sectionRows.reduce((sum, row) => sum + normalizeSectionPercent(row.selfAndRelation), 0) / sectionRows.length) : null,
+    bodyAndVitality: sectionRows.length ? Math.round(sectionRows.reduce((sum, row) => sum + normalizeSectionPercent(row.bodyAndVitality), 0) / sectionRows.length) : null,
+    meaningAndHope: sectionRows.length ? Math.round(sectionRows.reduce((sum, row) => sum + normalizeSectionPercent(row.meaningAndHope), 0) / sectionRows.length) : null
+  };
+
+  const offered = new Map<string, number>();
+  for (const row of analyses) {
+    for (const task of parseJsonStringArray(row.micro_tasks_json)) {
+      const normalized = task.trim();
+      if (!normalized) continue;
+      offered.set(normalized, (offered.get(normalized) ?? 0) + 1);
+    }
+  }
+  const completedByTask = new Map<string, number>();
+  for (const row of taskEvents) {
+    if (!row.completed) continue;
+    completedByTask.set(row.task_text, (completedByTask.get(row.task_text) ?? 0) + 1);
+  }
+  const interventionEffect = Array.from(offered.entries())
+    .map(([task, offeredCount]) => {
+      const completedCount = completedByTask.get(task) ?? 0;
+      return {
+        label: task,
+        offeredCount,
+        completedCount,
+        effectiveness: offeredCount ? Math.round((completedCount / offeredCount) * 100) : 0
+      };
+    })
+    .sort((a, b) => b.offeredCount - a.offeredCount || b.effectiveness - a.effectiveness)
+    .slice(0, 8);
+
+  const microTaskEvents = taskEvents.map((row) => ({
+    task: row.task_text,
+    taskDate: row.task_date,
+    completed: Boolean(row.completed),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }));
+
+  return {
+    range: { days, startDate: keys[0], endDate: keys[keys.length - 1] },
+    healthTrend,
+    stateDistribution,
+    heatmap,
+    sectionAverages,
+    interventionEffect,
+    microTaskEvents,
+    sourceCounts: {
+      assessments: assessments.length,
+      analyses: analyses.length,
+      microTaskEvents: taskEvents.length
+    }
+  };
+};
+
 const getLatestAssessment = async (userId: string): Promise<AssessmentRow | null> => {
   const db = await getDb();
   const row = await db.get<AssessmentRow>(
@@ -539,6 +743,7 @@ export const registerMindRoutes = async (fastify: FastifyInstance): Promise<void
         id,
         assessmentId: assessment?.id || null,
         score: assessment?.score ?? null,
+        sectionScores,
         level,
         ...analyzeOut,
         emotionTags: normalizedEmotionTags,
@@ -582,6 +787,75 @@ export const registerMindRoutes = async (fastify: FastifyInstance): Promise<void
         latestAssessment: latestAssessment ? toAssessmentResponse(latestAssessment) : null,
         latestAnalysis: latestAnalysis ? toAnalysisResponse(latestAnalysis) : null
       };
+    }
+  });
+
+  fastify.route({
+    method: "POST",
+    url: "/api/micro-tasks/toggle",
+    preHandler: authMiddleware,
+    handler: async (request) => {
+      const parsed = microTaskToggleSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw badRequest("INVALID_INPUT", parsed.error.issues.map((item) => item.message).join("; "));
+      }
+
+      const userId = asUserId(request);
+      const db = await getDb();
+      const now = Date.now();
+      const taskDate = parsed.data.taskDate ?? dateKey(now);
+      const existing = await db.get<MicroTaskEventRow>(
+        `
+          SELECT id, user_id, task_date, task_text, completed, created_at, updated_at
+          FROM micro_task_events
+          WHERE user_id = ? AND task_date = ? AND task_text = ?
+        `,
+        userId,
+        taskDate,
+        parsed.data.task
+      );
+      const id = existing?.id ?? randomUUID();
+      const createdAt = existing?.created_at ?? now;
+
+      await db.run(
+        `
+          INSERT INTO micro_task_events (id, user_id, task_date, task_text, completed, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(user_id, task_date, task_text) DO UPDATE SET
+            completed = excluded.completed,
+            updated_at = excluded.updated_at
+        `,
+        id,
+        userId,
+        taskDate,
+        parsed.data.task,
+        parsed.data.completed ? 1 : 0,
+        createdAt,
+        now
+      );
+
+      return {
+        task: parsed.data.task,
+        taskDate,
+        completed: parsed.data.completed,
+        createdAt,
+        updatedAt: now
+      };
+    }
+  });
+
+  fastify.route({
+    method: "GET",
+    url: "/api/profile/insights",
+    preHandler: authMiddleware,
+    handler: async (request) => {
+      const parsed = insightsQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        throw badRequest("INVALID_INPUT", parsed.error.issues.map((item) => item.message).join("; "));
+      }
+
+      const userId = asUserId(request);
+      return buildInsightData(userId, parsed.data.days);
     }
   });
 

@@ -122,19 +122,47 @@ const loadUserInfo = async (token: string): Promise<UserInfo | null> => {
   }
 };
 
+const migrateUserOwnedRows = async (fromUserId: string, toUserId: string): Promise<void> => {
+  if (fromUserId === toUserId) return;
+  const db = await getDb();
+  await db.exec("BEGIN");
+  try {
+    await db.run("UPDATE sessions SET user_id = ? WHERE user_id = ?", toUserId, fromUserId);
+    await db.run("UPDATE assessment_records SET user_id = ? WHERE user_id = ?", toUserId, fromUserId);
+    await db.run("UPDATE state_analyses SET user_id = ? WHERE user_id = ?", toUserId, fromUserId);
+    await db.run("UPDATE micro_task_events SET user_id = ? WHERE user_id = ?", toUserId, fromUserId).catch(() => undefined);
+    await db.run("UPDATE oidc_web_sessions SET user_id = ? WHERE user_id = ?", toUserId, fromUserId);
+    await db.run("UPDATE oidc_refresh_tokens SET user_id = ? WHERE user_id = ?", toUserId, fromUserId);
+    await db.run("UPDATE oidc_authorization_codes SET user_id = ? WHERE user_id = ?", toUserId, fromUserId);
+    await db.run("UPDATE users SET id = ? WHERE id = ?", toUserId, fromUserId);
+    await db.exec("COMMIT");
+  } catch (err) {
+    await db.exec("ROLLBACK");
+    throw err;
+  }
+};
+
 const ensureBusinessUser = async (userId: string, token: string): Promise<void> => {
   const db = await getDb();
   const existing = await db.get<{ id: string }>("SELECT id FROM users WHERE id = ? LIMIT 1", userId);
   if (existing) return;
 
   const userInfo = await loadUserInfo(token);
-  const email =
+  const email = (
     userInfo?.email ||
-    (userInfo?.preferred_username ? `${userInfo.preferred_username}@oidc.local` : `${userId}@oidc.local`);
+    (userInfo?.preferred_username ? `${userInfo.preferred_username}@oidc.local` : `${userId}@oidc.local`)
+  ).trim().toLowerCase();
+
+  const sameEmail = await db.get<{ id: string }>("SELECT id FROM users WHERE email = ? LIMIT 1", email);
+  if (sameEmail) {
+    await migrateUserOwnedRows(sameEmail.id, userId);
+    return;
+  }
+
   await db.run(
     "INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
     userId,
-    email.trim().toLowerCase(),
+    email,
     `oidc:${randomUUID()}`,
     Date.now()
   );

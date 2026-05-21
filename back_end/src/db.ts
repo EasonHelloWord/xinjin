@@ -83,6 +83,17 @@ const initialize = async (): Promise<Database> => {
       FOREIGN KEY (assessment_id) REFERENCES assessment_records(id) ON DELETE SET NULL
     );
 
+    CREATE TABLE IF NOT EXISTS micro_task_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      task_date TEXT NOT NULL,
+      task_text TEXT NOT NULL,
+      completed INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS site_counters (
       key TEXT PRIMARY KEY,
       value INTEGER NOT NULL,
@@ -149,6 +160,10 @@ const initialize = async (): Promise<Database> => {
       ON assessment_records(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_analysis_user_id_created_at
       ON state_analyses(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_micro_task_events_user_date
+      ON micro_task_events(user_id, task_date, updated_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_micro_task_events_user_date_text
+      ON micro_task_events(user_id, task_date, task_text);
     CREATE INDEX IF NOT EXISTS idx_oidc_codes_client_user
       ON oidc_authorization_codes(client_id, user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_oidc_refresh_user_client

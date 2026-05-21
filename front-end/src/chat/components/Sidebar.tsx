@@ -223,6 +223,9 @@ export function Sidebar({
       </div>
 
       <div className="mira-sidebar-foot">
+        <button type="button" onClick={() => navigate("/insights")} className="mira-side-action">
+          数据图谱
+        </button>
         <button type="button" onClick={onRequestReassess} className="mira-side-action">
           重新评估
         </button>

@@ -575,6 +575,7 @@ export function ChatDock({
       if (next.has(task)) next.delete(task);
       else next.add(task);
       persistCheckedTasks(next);
+      void api.toggleMicroTask(task, next.has(task)).catch(() => undefined);
       return next;
     });
   };

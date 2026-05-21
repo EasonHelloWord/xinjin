@@ -4,6 +4,7 @@ import { AUTH_SESSION_CHANGED, clearAuthToken, getAuthExpiresAt, getAuthToken, m
 import { refreshOidcLogin } from "./lib/oidc";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { HomePage } from "./pages/HomePage";
+import { InsightPage } from "./pages/InsightPage";
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
@@ -50,6 +51,7 @@ export default function App(): JSX.Element {
       <Route path="/login" element={token ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage onAuthenticated={onAuthed} />} />
       <Route path="/mind" element={token ? <HomePage onLogout={onLogout} /> : <Navigate to="/login" replace state={{ from: "/mind" }} />} />
+      <Route path="/insights" element={token ? <InsightPage onLogout={onLogout} /> : <Navigate to="/login" replace state={{ from: "/insights" }} />} />
       <Route path="/dashboard" element={<PlaceholderPage title="Dashboard" />} />
       <Route path="/kanban" element={<PlaceholderPage title="Kanban" />} />
       <Route path="*" element={<NotFoundRedirect />} />

@@ -199,6 +199,7 @@ export interface AnalysisResult {
   id: string;
   assessmentId: string | null;
   score: number | null;
+  sectionScores?: AssessmentSectionScores | null;
   level: UserLevel;
   emotionTags: string[];
   contradictions: string[];
@@ -228,6 +229,30 @@ export interface ProfileSummary {
 export interface ProfileTimeline {
   assessments: Array<AssessmentResult & { answers: number[] }>;
   analyses: Array<AnalysisResult & { inputText: string }>;
+}
+
+export interface InsightData {
+  range: { days: number; startDate: string; endDate: string };
+  healthTrend: Array<{ date: string; score: number | null; assessmentId: string | null; createdAt: number | null }>;
+  stateDistribution: Array<{ stateType: StateType; count: number; percentage: number }>;
+  heatmap: Array<{ dayOfWeek: number; hour: number; count: number; loadAverage: number | null }>;
+  sectionAverages: {
+    emotion: number | null;
+    selfAndRelation: number | null;
+    bodyAndVitality: number | null;
+    meaningAndHope: number | null;
+  };
+  interventionEffect: Array<{ label: string; offeredCount: number; completedCount: number; effectiveness: number }>;
+  microTaskEvents: Array<{ task: string; taskDate: string; completed: boolean; createdAt: number; updatedAt: number }>;
+  sourceCounts: { assessments: number; analyses: number; microTaskEvents: number };
+}
+
+export interface MicroTaskToggleResponse {
+  task: string;
+  taskDate: string;
+  completed: boolean;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface LandingVisitCount {
@@ -576,6 +601,15 @@ export const api = {
   getProfileSummary: (): Promise<ProfileSummary> => request<ProfileSummary>("/api/profile/summary"),
 
   getProfileTimeline: (): Promise<ProfileTimeline> => request<ProfileTimeline>("/api/profile/timeline"),
+
+  getProfileInsights: (days = 30): Promise<InsightData> =>
+    request<InsightData>(`/api/profile/insights?days=${encodeURIComponent(String(days))}`),
+
+  toggleMicroTask: (task: string, completed: boolean, taskDate?: string): Promise<MicroTaskToggleResponse> =>
+    request<MicroTaskToggleResponse>("/api/micro-tasks/toggle", {
+      method: "POST",
+      body: JSON.stringify({ task, completed, taskDate })
+    }),
 
   getLandingVisits: (): Promise<LandingVisitCount> =>
     request<LandingVisitCount>("/api/landing/visits", {

@@ -225,6 +225,18 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
     }
   };
 
+  const latestSectionScores = analysisResult?.sectionScores ?? assessmentResult?.sectionScores ?? null;
+  const latestAssessmentScore = analysisResult?.score ?? assessmentResult?.score ?? null;
+  const latestAssessmentLevel = analysisResult?.level ?? assessmentResult?.level ?? null;
+  const latestAssessmentLabel =
+    latestAssessmentLevel && latestAssessmentScore !== null
+      ? `${levelLabel(latestAssessmentLevel)} (${latestAssessmentScore}分)${
+          latestSectionScores
+            ? `｜情绪${latestSectionScores.emotion} 自我关系${latestSectionScores.selfAndRelation} 身体活力${latestSectionScores.bodyAndVitality} 意义希望${latestSectionScores.meaningAndHope}`
+            : ""
+        }`
+      : "";
+
   return (
     <div className="home-layout">
       {initLoading && (
@@ -284,15 +296,7 @@ export function HomePage({ onLogout }: HomePageProps): JSX.Element {
           chatEnabled={true}
           onRequestReassess={restartFlow}
           onAdviceRefresh={(payload) => void refreshAdviceFromChat(payload)}
-          assessmentLabel={
-            assessmentResult
-              ? `${levelLabel(assessmentResult.level)} (${assessmentResult.score}分)${
-                  assessmentResult.sectionScores
-                    ? `｜情绪${assessmentResult.sectionScores.emotion} 自我关系${assessmentResult.sectionScores.selfAndRelation} 身体活力${assessmentResult.sectionScores.bodyAndVitality} 意义希望${assessmentResult.sectionScores.meaningAndHope}`
-                    : ""
-                }`
-              : ""
-          }
+          assessmentLabel={latestAssessmentLabel}
           analysisSummary={{
             stateTypeLabel: stateTypeLabel(analysisResult.stateType),
             levelLabel: levelLabel(analysisResult.level),
