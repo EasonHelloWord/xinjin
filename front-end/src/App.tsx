@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { clearAuthToken, getAuthToken } from "./lib/auth";
+import { AUTH_SESSION_CHANGED, clearAuthToken, getAuthExpiresAt, getAuthToken, markLoginPromptRequired } from "./lib/auth";
+import { refreshOidcLogin } from "./lib/oidc";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { HomePage } from "./pages/HomePage";
 import { LandingPage } from "./pages/LandingPage";
@@ -14,12 +15,32 @@ function NotFoundRedirect(): JSX.Element {
 export default function App(): JSX.Element {
   const [token, setToken] = useState<string | null>(() => getAuthToken());
 
+  useEffect(() => {
+    const syncToken = (): void => {
+      setToken(getAuthToken());
+    };
+
+    window.addEventListener(AUTH_SESSION_CHANGED, syncToken);
+    window.addEventListener("storage", syncToken);
+
+    const expiresAt = getAuthExpiresAt();
+    if (expiresAt && expiresAt <= Date.now()) {
+      void refreshOidcLogin().then(syncToken);
+    }
+
+    return () => {
+      window.removeEventListener(AUTH_SESSION_CHANGED, syncToken);
+      window.removeEventListener("storage", syncToken);
+    };
+  }, []);
+
   const onAuthed = (): void => {
     setToken(getAuthToken());
   };
 
   const onLogout = (): void => {
     clearAuthToken();
+    markLoginPromptRequired();
     setToken(null);
   };
 

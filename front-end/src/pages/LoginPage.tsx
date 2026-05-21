@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
+import { consumeLoginPromptRequired } from "../lib/auth";
 import { startOidcLogin } from "../lib/oidc";
 
 export function LoginPage(): JSX.Element {
@@ -16,7 +17,7 @@ export function LoginPage(): JSX.Element {
     setError(null);
     setLoading(true);
     try {
-      await startOidcLogin({ register, returnTo: from });
+      await startOidcLogin({ register, promptLogin: !register && consumeLoginPromptRequired(), returnTo: from });
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);

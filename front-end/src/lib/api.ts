@@ -1,4 +1,5 @@
-import { getAuthToken } from "./auth";
+import { clearAuthToken, getAuthExpiresAt, getAuthToken } from "./auth";
+import { refreshOidcLogin } from "./oidc";
 
 const trim = (value: string | undefined): string => (value || "").trim();
 
@@ -30,6 +31,7 @@ const resolveApiBases = (): string[] => {
 
 const API_BASES = resolveApiBases();
 const API_BASE = API_BASES[0];
+const AUTH_REFRESH_MARGIN_MS = 60_000;
 
 type ApiErrorPayload = { error?: { code?: string; message?: string } };
 
@@ -62,11 +64,35 @@ const fetchWithFallback = async (path: string, init: RequestInit, bases = API_BA
   throw lastError instanceof Error ? lastError : new Error("Network request failed");
 };
 
+let refreshInFlight: Promise<string | null> | null = null;
+
+const refreshAuthToken = async (): Promise<string | null> => {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshOidcLogin().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+};
+
+const getFreshAuthToken = async (): Promise<string | null> => {
+  const token = getAuthToken();
+  if (!token) return null;
+
+  const expiresAt = getAuthExpiresAt();
+  if (!expiresAt || expiresAt - Date.now() > AUTH_REFRESH_MARGIN_MS) {
+    return token;
+  }
+
+  return refreshAuthToken();
+};
+
 const request = async <T>(
   path: string,
   init?: RequestInit & { skipAuth?: boolean; rawText?: boolean }
 ): Promise<T> => {
-  const token = getAuthToken();
+  const shouldAuth = !init?.skipAuth;
+  const token = shouldAuth ? await getFreshAuthToken() : null;
   const headers = new Headers(init?.headers);
   const hasBody = init?.body !== undefined && init?.body !== null;
 
@@ -74,7 +100,7 @@ const request = async <T>(
     headers.set("Content-Type", "application/json");
   }
 
-  if (!init?.skipAuth && token) {
+  if (shouldAuth && token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
@@ -84,6 +110,18 @@ const request = async <T>(
       ...init,
       headers
     });
+    if (shouldAuth && res.status === 401) {
+      const refreshedToken = await refreshAuthToken();
+      if (refreshedToken) {
+        headers.set("Authorization", `Bearer ${refreshedToken}`);
+        res = await fetchWithFallback(path, {
+          ...init,
+          headers
+        });
+      } else {
+        clearAuthToken();
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Network request failed";
     throw new Error(`Network error: ${message}. API_BASE=${API_BASE}. tried=${API_BASES.join(",")}`);
@@ -422,7 +460,7 @@ export const api = {
     options: SendOptions,
     handlers: SSEHandlers
   ): Promise<void> => {
-    const token = getAuthToken();
+    const token = await getFreshAuthToken();
     const headers = new Headers({ "Content-Type": "application/json" });
     if (token) headers.set("Authorization", `Bearer ${token}`);
 
@@ -443,6 +481,25 @@ export const api = {
         }),
         signal: ac.signal
       });
+      if (res.status === 401) {
+        const refreshedToken = await refreshAuthToken();
+        if (refreshedToken) {
+          headers.set("Authorization", `Bearer ${refreshedToken}`);
+          res = await fetchWithFallback(`/api/chat/sessions/${sessionId}/stream`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              content,
+              voice: Boolean(options.voice),
+              thinking: Boolean(options.thinking),
+              clientMessageId: options.clientMessageId
+            }),
+            signal: ac.signal
+          });
+        } else {
+          clearAuthToken();
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Network request failed";
       window.clearTimeout(timeout);

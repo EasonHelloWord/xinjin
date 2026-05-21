@@ -1,4 +1,4 @@
-import { setAuthToken } from "./auth";
+import { clearAuthToken, getRefreshToken, setAuthSession } from "./auth";
 
 const OIDC_STATE_KEY = "xinjin_oidc_state";
 const OIDC_VERIFIER_KEY = "xinjin_oidc_code_verifier";
@@ -36,6 +36,17 @@ const getSameOriginOauthBase = (): string => {
   const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   return `${window.location.origin}${base}/oauth`;
 };
+
+type TokenResponse = {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  error_description?: string;
+  error?: string;
+};
+
+const toExpiresAt = (expiresIn: number | undefined): number | undefined =>
+  typeof expiresIn === "number" && Number.isFinite(expiresIn) ? Date.now() + expiresIn * 1000 : undefined;
 
 export const startOidcLogin = async (options?: { register?: boolean; promptLogin?: boolean; returnTo?: string }): Promise<void> => {
   const state = randomString();
@@ -93,7 +104,7 @@ export const finishOidcLogin = async (code: string, state: string): Promise<stri
     },
     body
   });
-  const payload = (await res.json()) as { access_token?: string; error_description?: string; error?: string };
+  const payload = (await res.json()) as TokenResponse;
   if (!res.ok || !payload.access_token) {
     throw new Error(payload.error_description || payload.error || "登录失败。");
   }
@@ -102,6 +113,41 @@ export const finishOidcLogin = async (code: string, state: string): Promise<stri
   sessionStorage.removeItem(OIDC_VERIFIER_KEY);
   const returnTo = sessionStorage.getItem(OIDC_RETURN_KEY) || "/mind";
   sessionStorage.removeItem(OIDC_RETURN_KEY);
-  setAuthToken(payload.access_token);
+  setAuthSession({
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token,
+    expiresAt: toExpiresAt(payload.expires_in)
+  });
   return returnTo;
+};
+
+export const refreshOidcLogin = async (): Promise<string | null> => {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    client_id: oidcConfig.clientId,
+    refresh_token: refreshToken
+  });
+
+  const res = await fetch(`${getSameOriginOauthBase()}/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body
+  });
+  const payload = (await res.json()) as TokenResponse;
+  if (!res.ok || !payload.access_token) {
+    clearAuthToken();
+    return null;
+  }
+
+  setAuthSession({
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token || refreshToken,
+    expiresAt: toExpiresAt(payload.expires_in)
+  });
+  return payload.access_token;
 };
